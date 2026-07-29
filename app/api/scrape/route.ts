@@ -37,7 +37,9 @@ export async function GET(req: NextRequest) {
       const description = $("#manga-synopsis, .element-description").first().text().trim() || "";
       
       const authors: string[] = [];
-      $("a[href*='filter_by=author']").each((_, el) => authors.push($(el).text().trim()));
+      $("a[href*='filter_by=author']").each((_, el) => {
+        authors.push($(el).text().trim());
+      });
       const author = authors.join(", ") || "";
 
       // Extract genres
