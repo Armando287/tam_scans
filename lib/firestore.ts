@@ -1,34 +1,35 @@
-// NOTE: All functions here are client-only (call from "use client" components only)
-import { db } from "./firebase";
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  query,
-  where,
-  orderBy,
-  limit,
-  Timestamp,
-  serverTimestamp,
-  CollectionReference,
-  DocumentData,
-} from "firebase/firestore";
+// Client for Supabase REST API
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://ddbcetqueswsszzftmjh.supabase.co";
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRkYmNldHF1ZXN3c3N6emZ0bWpoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzMzYzNjAsImV4cCI6MjEwMDkxMjM2MH0.TON9YYSoe424lPZHGWwC_SqxDlVzTobiYQ647uHN2WE";
+
+async function supaFetch(path: string, options: RequestInit = {}) {
+  const headers = {
+    "apikey": SUPABASE_ANON_KEY,
+    "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+    "Content-Type": "application/json",
+    "Prefer": "return=representation",
+    ...options.headers,
+  };
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { ...options, headers });
+  if (!res.ok) {
+    const err = await res.text();
+    console.error("Supabase API Error:", err);
+    throw new Error(err);
+  }
+  return res.json();
+}
 
 export interface Manga {
   id?: string;
   title: string;
   description: string;
   coverUrl: string;
-  genres: string[];
+  genres: string[]; // store as string array in jsonb
   status: "ongoing" | "completed" | "hiatus";
   author: string;
   artist?: string;
-  createdAt?: Timestamp;
-  updatedAt?: Timestamp;
+  createdAt?: any;
+  updatedAt?: any;
   views?: number;
   rating?: number;
 }
@@ -38,13 +39,13 @@ export interface Chapter {
   mangaId: string;
   number: number;
   title: string;
-  pages: string[];
+  pages: string[]; // jsonb
   fileType: "images" | "pdf";
   pdfUrl?: string;
   uploadedBy: string;
   uploaderEmail: string;
   status: "pending" | "published" | "rejected";
-  createdAt?: Timestamp;
+  createdAt?: any;
   views?: number;
 }
 
@@ -56,86 +57,83 @@ export interface UserProfile {
   isVerified: boolean;
   isBanned: boolean;
   uploadCount: number;
-  createdAt?: Timestamp;
-}
-
-function mangasCol() {
-  return collection(db, "mangas") as CollectionReference<DocumentData>;
+  createdAt?: any;
 }
 
 // Mangas
 export async function getMangas(limitN = 20): Promise<Manga[]> {
-  const q = query(mangasCol(), orderBy("updatedAt", "desc"), limit(limitN));
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Manga));
+  const data = await supaFetch(`mangas?order=updatedAt.desc&limit=${limitN}`);
+  return data;
 }
 
 export async function getManga(id: string): Promise<Manga | null> {
-  const snap = await getDoc(doc(db, "mangas", id));
-  if (!snap.exists()) return null;
-  return { id: snap.id, ...snap.data() } as Manga;
+  const data = await supaFetch(`mangas?id=eq.${id}&limit=1`);
+  return data.length ? data[0] : null;
 }
 
 export async function createManga(data: Omit<Manga, "id">): Promise<string> {
-  const ref = await addDoc(mangasCol(), {
+  const payload = {
     ...data,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-    views: 0,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    views: 0
+  };
+  const res = await supaFetch(`mangas`, {
+    method: "POST",
+    body: JSON.stringify(payload)
   });
-  return ref.id;
+  return res[0].id;
 }
 
 export async function updateManga(id: string, data: Partial<Manga>): Promise<void> {
-  await updateDoc(doc(db, "mangas", id), { ...data, updatedAt: serverTimestamp() });
+  await supaFetch(`mangas?id=eq.${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ ...data, updatedAt: new Date().toISOString() })
+  });
 }
 
 export async function deleteManga(id: string): Promise<void> {
-  await deleteDoc(doc(db, "mangas", id));
+  await supaFetch(`mangas?id=eq.${id}`, { method: "DELETE" });
 }
 
 // Chapters
 export async function getChapters(mangaId: string): Promise<Chapter[]> {
-  const q = query(
-    collection(db, "chapters"),
-    where("mangaId", "==", mangaId),
-    where("status", "==", "published"),
-    orderBy("number", "asc")
-  );
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Chapter));
+  const data = await supaFetch(`chapters?mangaId=eq.${mangaId}&status=eq.published&order=number.asc`);
+  return data;
 }
 
 export async function getChapter(id: string): Promise<Chapter | null> {
-  const snap = await getDoc(doc(db, "chapters", id));
-  if (!snap.exists()) return null;
-  return { id: snap.id, ...snap.data() } as Chapter;
+  const data = await supaFetch(`chapters?id=eq.${id}&limit=1`);
+  return data.length ? data[0] : null;
 }
 
 export async function createChapter(data: Omit<Chapter, "id">): Promise<string> {
-  const ref = await addDoc(collection(db, "chapters"), {
+  const payload = {
     ...data,
-    createdAt: serverTimestamp(),
-    views: 0,
+    createdAt: new Date().toISOString(),
+    views: 0
+  };
+  const res = await supaFetch(`chapters`, {
+    method: "POST",
+    body: JSON.stringify(payload)
   });
-  return ref.id;
+  return res[0].id;
 }
 
-export async function updateChapterStatus(
-  id: string,
-  status: Chapter["status"]
-): Promise<void> {
-  await updateDoc(doc(db, "chapters", id), { status });
+export async function updateChapterStatus(id: string, status: Chapter["status"]): Promise<void> {
+  await supaFetch(`chapters?id=eq.${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status })
+  });
 }
 
 // Users
 export async function getUserProfile(uid: string): Promise<UserProfile | null> {
-  const snap = await getDoc(doc(db, "users", uid));
-  if (!snap.exists()) return null;
-  return { id: snap.id, ...snap.data() } as UserProfile;
+  const data = await supaFetch(`users?id=eq.${uid}&limit=1`);
+  return data.length ? data[0] : null;
 }
 
 export async function getAllUsers(): Promise<UserProfile[]> {
-  const snap = await getDocs(collection(db, "users"));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as UserProfile));
+  const data = await supaFetch(`users`);
+  return data;
 }
