@@ -1,0 +1,43 @@
+
+> manga-platform@0.1.0 build
+> next build
+
+▲ Next.js 16.2.12 (Turbopack)
+- Environments: .env.local
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 4.0s
+  Running TypeScript ...
+  Finished TypeScript in 3.7s ...
+  Collecting page data using 11 workers ...
+  Generating static pages using 11 workers (0/15) ...
+  Generating static pages using 11 workers (3/15) 
+  Generating static pages using 11 workers (7/15) 
+ReferenceError: location is not defined
+    at <unknown> (C:\Users\Armando\Videos\manga-platform\.next\server\chunks\ssr\_00qgl89._.js:1:1548)
+  Generating static pages using 11 workers (11/15) 
+✓ Generating static pages using 11 workers (15/15) in 827ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ○ /admin
+├ ○ /admin/chapters
+├ ○ /admin/mangas
+├ ○ /admin/users
+├ ƒ /api/admin
+├ ƒ /api/auth/sync
+├ ƒ /api/upload
+├ ○ /auth/login
+├ ○ /auth/register
+├ ○ /auth/verify
+├ ƒ /manga/[id]
+├ ƒ /manga/[id]/read/[chapterId]
+└ ○ /upload
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+ExitCode=0  
