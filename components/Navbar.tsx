@@ -116,7 +116,7 @@ export default function Navbar() {
                     <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
                       {user.email}
                     </div>
-                    {!user.emailVerified && (
+                    {!profile?.emailVerified && (
                       <div style={{ fontSize: 11, color: "var(--warning)", marginTop: 4 }}>
                         ⚠️ Email no verificado
                       </div>
