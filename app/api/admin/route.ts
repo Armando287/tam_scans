@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { deleteFolderFromS3 } from "@/lib/s3";
 
 export const runtime = "nodejs";
 
@@ -83,6 +84,11 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === "delete-chapter") {
+      // Fetch chapter first to get mangaId and number to delete from S3
+      const { data: chapter } = await client.from("chapters").select("mangaId, number").eq("id", id).single();
+      if (chapter) {
+        await deleteFolderFromS3(`mangas/${chapter.mangaId}/chapters/${chapter.number}/`).catch(console.error);
+      }
       await client.from("chapters").delete().eq("id", id);
       return NextResponse.json({ ok: true });
     }
@@ -111,7 +117,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ id: newManga?.id });
     }
 
+    if (action === "create-chapter") {
+      const { data: newChapter, error } = await client.from("chapters").insert({
+        mangaId: data.manga_id,
+        title: data.title,
+        number: data.number,
+        pages: data.pages,
+        fileType: "images",
+        status: "published",
+        uploadedBy: user.id,
+        uploaderEmail: user.email || ""
+      }).select("id").single();
+      
+      if (error) throw error;
+      
+      // Update manga's updatedAt
+      await client.from("mangas").update({ updatedAt: new Date().toISOString() }).eq("id", data.manga_id);
+
+      return NextResponse.json({ id: newChapter?.id });
+    }
+
     if (action === "delete-manga") {
+      // Delete all images in S3
+      await deleteFolderFromS3(`mangas/${id}/`).catch(console.error);
+      // Delete from Supabase
       await client.from("mangas").delete().eq("id", id);
       return NextResponse.json({ ok: true });
     }
