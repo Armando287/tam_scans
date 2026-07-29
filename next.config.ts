@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["firebase-admin"],
+  // removed firebase-admin
   images: {
     remotePatterns: [
       {
