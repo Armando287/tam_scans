@@ -127,6 +127,39 @@ export default function AdminMangas() {
             <h2 className="modal-title">{editingId ? "Editar manga" : "Crear manga"}</h2>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {!editingId && (
+                <div className="form-group" style={{ background: "rgba(124,58,237,0.1)", padding: 12, borderRadius: 8, border: "1px dashed var(--accent-primary)" }}>
+                  <label htmlFor="manga-form-import" className="form-label">Auto-importar desde URL (Beta)</label>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input id="manga-form-import" className="form-input" placeholder="https://zonatmo.org/..." style={{ flex: 1 }} />
+                    <button className="btn btn-primary" type="button" onClick={async () => {
+                      const url = (document.getElementById("manga-form-import") as HTMLInputElement).value;
+                      if (!url) return;
+                      const btn = document.getElementById("import-btn");
+                      if (btn) btn.innerText = "⏳";
+                      try {
+                        const res = await fetch(`/api/scrape?url=${encodeURIComponent(url)}`);
+                        const data = await res.json();
+                        if (data.error) throw new Error(data.error);
+                        setForm(f => ({
+                          ...f,
+                          title: data.title || f.title,
+                          description: data.description || f.description,
+                          author: data.author || f.author,
+                          coverUrl: data.coverUrl || f.coverUrl,
+                          genres: data.genres?.length ? data.genres : f.genres,
+                        }));
+                        showToast("Manga importado exitosamente", "success");
+                      } catch (err: any) {
+                        showToast(err.message, "error");
+                      } finally {
+                        if (btn) btn.innerText = "Importar";
+                      }
+                    }} id="import-btn">Importar</button>
+                  </div>
+                  <small style={{ color: "var(--text-muted)", marginTop: 4, display: "block" }}>Soporta: ZonaTMO</small>
+                </div>
+              )}
               <div className="form-group">
                 <label htmlFor="manga-form-title" className="form-label">Título *</label>
                 <input id="manga-form-title" className="form-input" value={form.title} onChange={e => setForm(f => ({...f, title: e.target.value}))} placeholder="One Piece" required />
