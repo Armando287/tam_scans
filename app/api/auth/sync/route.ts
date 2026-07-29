@@ -54,14 +54,28 @@ export async function POST(req: NextRequest) {
     };
 
     // Supabase upsert
-    const res = await supaFetch(`users`, {
-      method: "POST",
-      headers: { "Prefer": "resolution=merge-duplicates,return=representation" },
-      body: JSON.stringify(payload)
-    });
+    // First try to check if user exists by email (to handle the seeded admin user)
+    const existing = await supaFetch(`users?email=eq.${encodeURIComponent(decoded.email)}&limit=1`);
+    
+    let resData;
+    if (existing && existing.length > 0) {
+      // Update existing user (e.g. seeded admin) with the real Firebase UID and other info
+      await supaFetch(`users?email=eq.${encodeURIComponent(decoded.email)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ id: decoded.uid, displayName: payload.displayName, isVerified: payload.isVerified })
+      });
+      resData = { ...existing[0], id: decoded.uid, displayName: payload.displayName, isVerified: payload.isVerified };
+    } else {
+      // Insert new user
+      const res = await supaFetch(`users`, {
+        method: "POST",
+        headers: { "Prefer": "return=representation" },
+        body: JSON.stringify(payload)
+      });
+      resData = res[0];
+    }
 
-    const data = res[0];
-    return NextResponse.json({ user: data });
+    return NextResponse.json({ user: resData });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 401 });
   }
