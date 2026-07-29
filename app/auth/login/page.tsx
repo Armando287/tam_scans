@@ -26,12 +26,7 @@ export default function LoginPage() {
       showToast("¡Bienvenido de vuelta!", "success");
       router.push("/");
     } catch (err: any) {
-      const msg = err.code === "auth/invalid-credential"
-        ? "Email o contraseña incorrectos"
-        : err.code === "auth/too-many-requests"
-        ? "Demasiados intentos. Intenta más tarde."
-        : "Error al iniciar sesión";
-      showToast(msg, "error");
+      showToast(err.message || "Error al iniciar sesión", "error");
     } finally {
       setLoading(false);
     }
