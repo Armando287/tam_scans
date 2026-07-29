@@ -71,7 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           uid: data.id,
           email: data.email,
           displayName: data.displayName,
-          emailVerified: data.isVerified,
+          emailVerified: !!authUser.email_confirmed_at || data.isVerified,
           isAdmin: data.isAdmin,
           isBanned: data.isBanned,
           uploadCount: data.uploadCount,
