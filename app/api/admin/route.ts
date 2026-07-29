@@ -1,16 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase-admin";
+import { createClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
+
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://ddbcetqueswsszzftmjh.supabase.co";
+// Need service role to ban/unban users from auth
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NTMzNjM2MCwiZXhwIjoyMTAwOTEyMzYwfQ.GdBmpCH4oQZi179qrzV77r_zTRp-pQEyBHNdGi1rFUo";
+
+const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_KEY);
 
 async function verifyAdmin(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
   if (!authHeader?.startsWith("Bearer ")) throw new Error("Unauthorized");
   const token = authHeader.slice(7);
-  const decoded = await adminAuth.verifyIdToken(token);
-  const userDoc = await adminDb.collection("users").doc(decoded.uid).get();
-  if (!userDoc.data()?.isAdmin) throw new Error("Forbidden: Not an admin");
-  return decoded;
+
+  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+  if (error || !user) throw new Error("Unauthorized");
+
+  const { data: userDoc } = await supabaseAdmin.from("users").select("isAdmin").eq("id", user.id).single();
+  if (!userDoc?.isAdmin) throw new Error("Forbidden: Not an admin");
+  
+  return user;
 }
 
 // GET /api/admin?action=stats|chapters|users
@@ -21,30 +31,27 @@ export async function GET(req: NextRequest) {
     const action = searchParams.get("action");
 
     if (action === "stats") {
-      const [mangasSnap, chaptersSnap, usersSnap] = await Promise.all([
-        adminDb.collection("mangas").get(),
-        adminDb.collection("chapters").get(),
-        adminDb.collection("users").get(),
-      ]);
-      const pending = chaptersSnap.docs.filter((d: { data: () => Record<string, unknown> }) => d.data().status === "pending").length;
+      const { count: mangas } = await supabaseAdmin.from("mangas").select("*", { count: "exact", head: true });
+      const { count: chapters } = await supabaseAdmin.from("chapters").select("*", { count: "exact", head: true });
+      const { count: users } = await supabaseAdmin.from("users").select("*", { count: "exact", head: true });
+      const { count: pending } = await supabaseAdmin.from("chapters").select("*", { count: "exact", head: true }).eq("status", "pending");
+      
       return NextResponse.json({
-        mangas: mangasSnap.size,
-        chapters: chaptersSnap.size,
-        users: usersSnap.size,
-        pending,
+        mangas: mangas || 0,
+        chapters: chapters || 0,
+        users: users || 0,
+        pending: pending || 0,
       });
     }
 
     if (action === "chapters") {
-      const snap = await adminDb.collection("chapters").orderBy("createdAt", "desc").get();
-      const chapters = snap.docs.map((d: { id: string; data: () => Record<string, unknown> }) => ({ id: d.id, ...d.data() }));
-      return NextResponse.json({ chapters });
+      const { data: chapters } = await supabaseAdmin.from("chapters").select("*").order("createdAt", { ascending: false });
+      return NextResponse.json({ chapters: chapters || [] });
     }
 
     if (action === "users") {
-      const snap = await adminDb.collection("users").orderBy("createdAt", "desc").get();
-      const users = snap.docs.map((d: { id: string; data: () => Record<string, unknown> }) => ({ id: d.id, ...d.data() }));
-      return NextResponse.json({ users });
+      const { data: users } = await supabaseAdmin.from("users").select("*").order("createdAt", { ascending: false });
+      return NextResponse.json({ users: users || [] });
     }
 
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
@@ -61,61 +68,56 @@ export async function POST(req: NextRequest) {
     const { action, id, data } = body;
 
     if (action === "approve-chapter") {
-      await adminDb.collection("chapters").doc(id).update({ status: "published" });
-      // Update manga's updatedAt
-      const chapter = await adminDb.collection("chapters").doc(id).get();
-      if (chapter.data()?.mangaId) {
-        await adminDb.collection("mangas").doc(chapter.data()!.mangaId).update({
-          updatedAt: new Date(),
-        });
+      await supabaseAdmin.from("chapters").update({ status: "published" }).eq("id", id);
+      const { data: chapter } = await supabaseAdmin.from("chapters").select("mangaId").eq("id", id).single();
+      if (chapter?.mangaId) {
+        await supabaseAdmin.from("mangas").update({ updatedAt: new Date().toISOString() }).eq("id", chapter.mangaId);
       }
       return NextResponse.json({ ok: true });
     }
 
     if (action === "reject-chapter") {
-      await adminDb.collection("chapters").doc(id).update({ status: "rejected" });
+      await supabaseAdmin.from("chapters").update({ status: "rejected" }).eq("id", id);
       return NextResponse.json({ ok: true });
     }
 
     if (action === "delete-chapter") {
-      await adminDb.collection("chapters").doc(id).delete();
+      await supabaseAdmin.from("chapters").delete().eq("id", id);
       return NextResponse.json({ ok: true });
     }
 
     if (action === "ban-user") {
-      await adminDb.collection("users").doc(id).update({ isBanned: true });
-      await adminAuth.updateUser(id, { disabled: true });
+      await supabaseAdmin.from("users").update({ isBanned: true }).eq("id", id);
+      await supabaseAdmin.auth.admin.updateUserById(id, { ban_duration: "87600h" }); // Ban for 10 years
       return NextResponse.json({ ok: true });
     }
 
     if (action === "unban-user") {
-      await adminDb.collection("users").doc(id).update({ isBanned: false });
-      await adminAuth.updateUser(id, { disabled: false });
+      await supabaseAdmin.from("users").update({ isBanned: false }).eq("id", id);
+      await supabaseAdmin.auth.admin.updateUserById(id, { ban_duration: "none" });
       return NextResponse.json({ ok: true });
     }
 
     if (action === "make-admin") {
-      await adminDb.collection("users").doc(id).update({ isAdmin: true });
+      await supabaseAdmin.from("users").update({ isAdmin: true }).eq("id", id);
       return NextResponse.json({ ok: true });
     }
 
     if (action === "create-manga") {
-      const ref = await adminDb.collection("mangas").add({
+      const { data: newManga } = await supabaseAdmin.from("mangas").insert({
         ...data,
-        createdAt: new Date(),
-        updatedAt: new Date(),
         views: 0,
-      });
-      return NextResponse.json({ id: ref.id });
+      }).select("id").single();
+      return NextResponse.json({ id: newManga?.id });
     }
 
     if (action === "delete-manga") {
-      await adminDb.collection("mangas").doc(id).delete();
+      await supabaseAdmin.from("mangas").delete().eq("id", id);
       return NextResponse.json({ ok: true });
     }
 
     if (action === "update-manga") {
-      await adminDb.collection("mangas").doc(id).update({ ...data, updatedAt: new Date() });
+      await supabaseAdmin.from("mangas").update({ ...data, updatedAt: new Date().toISOString() }).eq("id", id);
       return NextResponse.json({ ok: true });
     }
 
