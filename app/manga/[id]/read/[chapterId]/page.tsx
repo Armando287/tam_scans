@@ -14,6 +14,32 @@ const MODE_LABELS: Record<ReadMode, string> = {
   pdf: "📄 PDF",
 };
 
+function ReaderImage({ src, alt, priority, style }: { src: string, alt: string, priority?: boolean, style?: React.CSSProperties }) {
+  const [loading, setLoading] = useState(true);
+
+  return (
+    <div style={{ position: "relative", width: "100%", display: "flex", justifyContent: "center", alignItems: "center", minHeight: 300 }}>
+      {loading && (
+         <div style={{ position: "absolute", display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+            <div className="loading-spinner" />
+            <span style={{ color: "var(--text-muted)", fontSize: 14 }}>Cargando...</span>
+         </div>
+      )}
+      <Image
+        src={src}
+        alt={alt}
+        width={800}
+        height={1200}
+        style={{ ...style, opacity: loading ? 0 : 1, transition: "opacity 0.3s ease-in-out" }}
+        unoptimized
+        priority={priority}
+        loading={priority ? "eager" : "lazy"}
+        onLoad={() => setLoading(false)}
+      />
+    </div>
+  );
+}
+
 function PdfViewer({ url }: { url: string }) {
   return (
     <div className="reader-pdf" style={{ paddingTop: 60 }}>
@@ -64,14 +90,11 @@ function HorizontalReader({ pages, currentPage, onPageChange }: {
     >
       {pages[currentPage] && (
         <div className="reader-horizontal-page">
-          <Image
-            src={pages[currentPage]}
+          <ReaderImage
+            src={`/api/proxy?url=${encodeURIComponent(pages[currentPage])}`}
             alt={`Página ${currentPage + 1}`}
-            width={800}
-            height={1200}
-            style={{ maxWidth: "100%", maxHeight: "calc(100vh - 120px)", objectFit: "contain", width: "auto", height: "auto" }}
             priority
-            unoptimized
+            style={{ maxWidth: "100%", maxHeight: "calc(100vh - 120px)", objectFit: "contain", width: "auto", height: "auto" }}
           />
         </div>
       )}
@@ -124,15 +147,12 @@ function VerticalReader({ pages, webtoon }: { pages: string[]; webtoon?: boolean
       style={{ gap: webtoon ? 0 : 4 }}
     >
       {pages.map((url, i) => (
-        <Image
+        <ReaderImage
           key={i}
-          src={url}
+          src={`/api/proxy?url=${encodeURIComponent(url)}`}
           alt={`Página ${i + 1}`}
-          width={800}
-          height={1200}
+          priority={i < 3}
           style={{ width: "100%", maxWidth: webtoon ? "none" : 800, height: "auto" }}
-          unoptimized
-          loading={i < 3 ? "eager" : "lazy"}
         />
       ))}
     </div>

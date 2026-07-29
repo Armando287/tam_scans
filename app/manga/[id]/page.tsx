@@ -70,7 +70,7 @@ export default function MangaDetailPage() {
         <div className="manga-cover-lg">
           {manga.coverUrl ? (
             <Image
-              src={manga.coverUrl}
+              src={`/api/proxy?url=${encodeURIComponent(manga.coverUrl)}`}
               alt={`Portada de ${manga.title}`}
               width={200}
               height={300}

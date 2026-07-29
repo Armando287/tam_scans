@@ -158,7 +158,7 @@ export default function AdminMangas() {
              
              // 3. Create chapter in DB
              if (finalPages.length > 0) {
-                 await fetch("/api/admin", {
+                 const adminRes = await fetch("/api/admin", {
                     method: "POST",
                     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -171,6 +171,11 @@ export default function AdminMangas() {
                         }
                     })
                  });
+                 if (!adminRes.ok) {
+                     const errData = await adminRes.json();
+                     console.error("Failed to create chapter in DB:", errData);
+                     alert("Error al guardar capítulo en BD: " + (errData.error || "Desconocido"));
+                 }
              }
           } catch(e) {
              console.error("Error importing chapter", e);

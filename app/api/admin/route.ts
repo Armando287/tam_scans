@@ -64,10 +64,12 @@ export async function GET(req: NextRequest) {
 
 // POST /api/admin { action, id, data }
 export async function POST(req: NextRequest) {
+  console.log("-> POST /api/admin started");
   try {
-    const { client } = await verifyAdmin(req);
+    const { client, user } = await verifyAdmin(req);
     const body = await req.json();
     const { action, id, data } = body;
+    console.log("-> POST /api/admin action:", action);
 
     if (action === "approve-chapter") {
       await client.from("chapters").update({ status: "published" }).eq("id", id);
@@ -126,10 +128,15 @@ export async function POST(req: NextRequest) {
         fileType: "images",
         status: "published",
         uploadedBy: user.id,
-        uploaderEmail: user.email || ""
+        uploaderEmail: user.email || "",
+        views: 0,
+        createdAt: new Date().toISOString()
       }).select("id").single();
       
-      if (error) throw error;
+      if (error) {
+        console.error("Supabase create-chapter error:", error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
       
       // Update manga's updatedAt
       await client.from("mangas").update({ updatedAt: new Date().toISOString() }).eq("id", data.manga_id);
@@ -152,6 +159,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (err: any) {
+    console.error("API Admin Catch Error:", err);
     return NextResponse.json({ error: err.message }, { status: 403 });
   }
 }
