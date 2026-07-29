@@ -60,7 +60,8 @@ export default function AdminMangas() {
       setShowModal(false);
       await load();
     } else {
-      showToast("Error al guardar", "error");
+      const err = await res.json();
+      showToast(`Error: ${err.error || "Error al guardar"}`, "error");
     }
     setSaving(false);
   }
