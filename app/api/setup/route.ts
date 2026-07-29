@@ -3,6 +3,35 @@ import { Pool } from 'pg';
 
 export async function GET() {
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+
+  // Create user in Supabase Auth using Admin API
+  const SUPABASE_URL = "https://ddbcetqueswsszzftmjh.supabase.co";
+  const SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NTMzNjM2MCwiZXhwIjoyMTAwOTEyMzYwfQ.GdBmpCH4oQZi179qrzV77r_zTRp-pQEyBHNdGi1rFUo";
+  
+  let adminUid = 'admin-dummy-id';
+  try {
+    const authRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
+      method: "POST",
+      headers: {
+        "apikey": SERVICE_ROLE_KEY,
+        "Authorization": `Bearer ${SERVICE_ROLE_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: "admin@mangaverse.local",
+        password: "admin1234",
+        email_confirm: true,
+        user_metadata: { displayName: "Admin" }
+      })
+    });
+    const authData = await authRes.json();
+    if (authData && authData.id) {
+      adminUid = authData.id;
+    }
+  } catch (e) {
+    console.error("Auth creation error", e);
+  }
+
   const pool = new Pool({
     connectionString: process.env.POSTGRES_URL_NON_POOLING || process.env.POSTGRES_URL,
     ssl: { rejectUnauthorized: false }
@@ -61,12 +90,12 @@ export async function GET() {
       );
     `);
 
-    // Insert Admin User (We use a dummy ID, but they should login with Firebase to get their real UID, which will update this later or they can just match by email)
+    // Insert Admin User mapping to the real Auth ID
     await client.query(`
       INSERT INTO users (id, email, "displayName", "isAdmin", "isVerified")
-      VALUES ('admin-dummy-id', 'admin@mangaverse.local', 'Admin', true, true)
+      VALUES ($1, 'admin@mangaverse.local', 'Admin', true, true)
       ON CONFLICT (email) DO NOTHING;
-    `);
+    `, [adminUid]);
 
     client.release();
     return NextResponse.json({ success: true, message: "Tables created and admin user seeded successfully!" });
