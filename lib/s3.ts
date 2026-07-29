@@ -44,13 +44,13 @@ export async function deleteFolderFromS3(prefix: string) {
       ContinuationToken: continuationToken,
     });
     
-    const listResponse = await s3Client.send(listCommand);
+    const listResponse: any = await s3Client.send(listCommand);
     
     if (listResponse.Contents && listResponse.Contents.length > 0) {
       const deleteCommand = new DeleteObjectsCommand({
         Bucket: BUCKET,
         Delete: {
-          Objects: listResponse.Contents.map((obj) => ({ Key: obj.Key })),
+          Objects: listResponse.Contents.map((obj: any) => ({ Key: obj.Key })),
         },
       });
       await s3Client.send(deleteCommand);
