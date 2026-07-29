@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import { Pool } from 'pg';
 
 export async function GET() {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
   const pool = new Pool({
-    connectionString: process.env.POSTGRES_URL,
+    connectionString: process.env.POSTGRES_URL_NON_POOLING || process.env.POSTGRES_URL,
     ssl: { rejectUnauthorized: false }
   });
 
