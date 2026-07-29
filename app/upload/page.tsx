@@ -44,7 +44,7 @@ export default function UploadPage() {
     router.replace("/auth/login");
     return null;
   }
-  if (!user.emailVerified) {
+  if (!profile?.emailVerified) {
     router.replace("/auth/verify");
     return null;
   }
