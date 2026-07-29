@@ -29,15 +29,23 @@ export default function VerifyPage() {
   async function handleCheck() {
     setChecking(true);
     try {
-      await refreshProfile();
+      // Force refresh session from server to get updated email_confirmed_at
+      const { data: { session }, error } = await supabase.auth.refreshSession();
+      const { data: { user } } = await supabase.auth.getUser();
       
-      const { data } = await supabase.auth.getSession();
-      if (data.session?.user?.email_confirmed_at) {
+      // Also check our own users table just in case they were manually verified
+      const { data: userDoc } = await supabase.from("users").select("isVerified").eq("email", user?.email).maybeSingle();
+
+      if (user?.email_confirmed_at || userDoc?.isVerified) {
+        await refreshProfile();
         showToast("¡Email verificado! Ya puedes subir scans 🎉", "success");
         router.push("/");
       } else {
         showToast("Aún no verificado. Revisa tu bandeja de entrada.", "info");
       }
+    } catch(err) {
+      console.error(err);
+      showToast("Error al verificar. Intenta de nuevo.", "error");
     } finally {
       setChecking(false);
     }

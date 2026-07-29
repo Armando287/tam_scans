@@ -58,8 +58,17 @@ export async function GET(req: NextRequest) {
       if (chapters.length === 0) {
         $("a[href*='view_uploads']").each((_, el) => {
            const cUrl = $(el).attr("href");
-           // Try to infer title from text or just use generic
-           const cTitle = $(el).text().trim() || "Capítulo";
+           const container = $(el).closest('li.list-group-item, li');
+           let cTitle = container.find('.chapter-number').first().text().trim();
+           if (!cTitle) cTitle = container.find('h4, .text-truncate').first().text().trim();
+           
+           // Clean up the title by extracting just the "Capítulo X" part
+           if (cTitle) {
+               cTitle = cTitle.split('\n')[0].trim();
+           } else {
+               cTitle = "Capítulo";
+           }
+           
            if (cUrl && !chapters.find(c => c.url === cUrl)) {
               chapters.push({ title: cTitle, url: cUrl });
            }

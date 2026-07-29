@@ -96,19 +96,37 @@ export default function AdminMangas() {
   }
 
   async function startChapterImport(mangaId: string, chapters: any[]) {
-      if (!confirm(`Se encontraron ${chapters.length} capítulos. ¿Deseas descargar y subir todas sus imágenes ahora? ADVERTENCIA: Esto puede tardar mucho tiempo y NO debes cerrar la pestaña.`)) {
+      // Fetch existing chapters to avoid duplicates
+      const { getChapters } = await import('@/lib/firestore');
+      const existingChapters = await getChapters(mangaId, { allStatuses: true });
+      const existingNumbers = new Set(existingChapters.map(c => c.number));
+      
+      const newChapters = chapters.filter(chap => {
+          const num = chap.title.match(/(\d+(\.\d+)?)/)?.[0];
+          if (!num) return true;
+          return !existingNumbers.has(parseFloat(num));
+      });
+
+      if (newChapters.length === 0) {
+          alert("Todos los capítulos encontrados ya han sido subidos previamente.");
+          setShowModal(false);
+          await load();
+          return;
+      }
+
+      if (!confirm(`Se encontraron ${newChapters.length} capítulos nuevos (se omitieron ${chapters.length - newChapters.length} ya existentes). ¿Deseas descargar y subir todas sus imágenes ahora? ADVERTENCIA: Esto puede tardar mucho tiempo y NO debes cerrar la pestaña.`)) {
           setShowModal(false);
           await load();
           return;
       }
       
-      setImportStatus({ type: "fetching_chapters", totalChapters: chapters.length, currentChapter: 0, message: "Iniciando descarga masiva..." });
+      setImportStatus({ type: "fetching_chapters", totalChapters: newChapters.length, currentChapter: 0, message: "Iniciando descarga masiva..." });
       
       const token = await getToken();
       
-      for (let i = 0; i < chapters.length; i++) {
-          const chap = chapters[i];
-          setImportStatus({ type: "fetching_chapters", totalChapters: chapters.length, currentChapter: i + 1, message: `Analizando ${chap.title}...` });
+      for (let i = 0; i < newChapters.length; i++) {
+          const chap = newChapters[i];
+          setImportStatus({ type: "fetching_chapters", totalChapters: newChapters.length, currentChapter: i + 1, message: `Analizando ${chap.title}...` });
           
           try {
              // 1. Get images for chapter
@@ -121,7 +139,7 @@ export default function AdminMangas() {
              const chapterNumber = chap.title.match(/(\d+(\.\d+)?)/)?.[0] || String(i+1);
              
              let completedPages = 0;
-             const MAX_CONCURRENCY = 5;
+             const MAX_CONCURRENCY = 100;
              
              const uploadTasks = data.images.map((imgUrl: string, j: number) => async () => {
                  const upRes = await fetch("/api/upload/external", {
@@ -141,7 +159,7 @@ export default function AdminMangas() {
                  completedPages++;
                  setImportStatus({ 
                     type: "uploading_pages", 
-                    totalChapters: chapters.length, 
+                    totalChapters: newChapters.length, 
                     currentChapter: i + 1,
                     totalPages: data.images.length,
                     currentPage: completedPages,
@@ -210,8 +228,8 @@ export default function AdminMangas() {
       
       const mangaId = editingId || savedData.id;
       
-      if (mangaId && pendingChapters.length > 0 && !editingId) {
-          // If we just created a new manga and we have pending chapters, trigger the mass import
+      if (mangaId && pendingChapters.length > 0) {
+          // If we have pending chapters, trigger the mass import (for new or existing manga)
           await startChapterImport(mangaId, pendingChapters);
       } else {
           setShowModal(false);
@@ -329,18 +347,18 @@ export default function AdminMangas() {
             <h2 className="modal-title">{editingId ? "Editar manga" : "Crear manga"}</h2>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              {!editingId && (
-                <div className="form-group" style={{ background: "rgba(124,58,237,0.1)", padding: 12, borderRadius: 8, border: "1px dashed var(--accent-primary)" }}>
-                  <label htmlFor="manga-form-import" className="form-label">Auto-importar desde URL (Beta)</label>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <input id="manga-form-import" className="form-input" placeholder="https://zonatmo.org/..." style={{ flex: 1 }} />
-                    <button className="btn btn-primary" type="button" onClick={handleAutoImport} id="import-btn">
-                       {importStatus.type === "fetching_manga" ? "⏳" : "Importar"}
-                    </button>
-                  </div>
-                  <small style={{ color: "var(--text-muted)", marginTop: 4, display: "block" }}>Soporta: ZonaTMO</small>
+              <div className="form-group" style={{ background: "rgba(124,58,237,0.1)", padding: 12, borderRadius: 8, border: "1px dashed var(--accent-primary)" }}>
+                <label htmlFor="manga-form-import" className="form-label">Auto-importar / Actualizar desde URL</label>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input id="manga-form-import" className="form-input" placeholder="https://zonatmo.org/..." style={{ flex: 1 }} />
+                  <button className="btn btn-primary" type="button" onClick={handleAutoImport} id="import-btn">
+                     {importStatus.type === "fetching_manga" ? "⏳" : "Importar"}
+                  </button>
                 </div>
-              )}
+                <small style={{ color: "var(--text-muted)", marginTop: 4, display: "block" }}>
+                  {editingId ? "Actualizará los datos vacíos y buscará nuevos capítulos." : "Obtendrá portada, título, descripción y capítulos."} Soporta: ZonaTMO
+                </small>
+              </div>
               <div className="form-group">
                 <label htmlFor="manga-form-title" className="form-label">Título *</label>
                 <input id="manga-form-title" className="form-input" value={form.title} onChange={e => setForm(f => ({...f, title: e.target.value}))} placeholder="One Piece" required />

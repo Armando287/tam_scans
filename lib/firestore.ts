@@ -97,8 +97,9 @@ export async function deleteManga(id: string): Promise<void> {
 }
 
 // Chapters
-export async function getChapters(mangaId: string): Promise<Chapter[]> {
-  const data = await supaFetch(`chapters?mangaId=eq.${mangaId}&status=eq.published&order=number.asc`);
+export async function getChapters(mangaId: string, options?: { allStatuses?: boolean }): Promise<Chapter[]> {
+  const statusFilter = options?.allStatuses ? "" : "&status=eq.published";
+  const data = await supaFetch(`chapters?mangaId=eq.${mangaId}${statusFilter}&order=number.asc`);
   return data;
 }
 
