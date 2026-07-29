@@ -3,8 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
-import { sendEmailVerification } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { supabase } from "@/lib/supabase";
 
 export default function VerifyPage() {
   const { user, refreshProfile, logout } = useAuth();
@@ -14,10 +13,11 @@ export default function VerifyPage() {
   const [checking, setChecking] = useState(false);
 
   async function handleResend() {
-    if (!auth.currentUser) return;
+    if (!user || !user.email) return;
     setResending(true);
     try {
-      await sendEmailVerification(auth.currentUser);
+      const { error } = await supabase.auth.resend({ type: "signup", email: user.email });
+      if (error) throw error;
       showToast("Email de verificación reenviado ✉️", "success");
     } catch {
       showToast("No se pudo reenviar. Espera un momento.", "error");
@@ -30,7 +30,9 @@ export default function VerifyPage() {
     setChecking(true);
     try {
       await refreshProfile();
-      if (auth.currentUser?.emailVerified) {
+      
+      const { data } = await supabase.auth.getSession();
+      if (data.session?.user?.email_confirmed_at) {
         showToast("¡Email verificado! Ya puedes subir scans 🎉", "success");
         router.push("/");
       } else {
