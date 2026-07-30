@@ -207,7 +207,7 @@ export default function MangaPage() {
         ) : (
           <div className="chapter-list-app">
             {paginatedChapters.map((ch) => {
-              const isRead = readHistory.includes(ch.id);
+              const isRead = ch.id ? readHistory.includes(ch.id) : false;
               return (
                 <Link
                   key={ch.id}
