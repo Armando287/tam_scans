@@ -33,6 +33,8 @@ export default function UploadPage() {
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showDropdown, setShowDropdown] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
 
@@ -212,25 +214,70 @@ export default function UploadPage() {
           <div className="upload-section-title">📚 Información del capítulo</div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <div className="form-group">
+            <div className="form-group" style={{ position: "relative" }}>
               <label htmlFor="upload-manga-select" className="form-label">Manga</label>
               <input
                 id="upload-manga-select"
-                list="mangas-list"
+                type="text"
                 className="form-input"
-                placeholder="Busca y selecciona un manga..."
+                placeholder="Escribe para buscar un manga..."
+                value={searchQuery}
                 onChange={(e) => {
-                  const selectedTitle = e.target.value;
-                  const selected = mangas.find(m => m.title === selectedTitle);
+                  setSearchQuery(e.target.value);
+                  setShowDropdown(true);
+                  const selected = mangas.find(m => m.title === e.target.value);
                   setSelectedMangaId(selected?.id || "");
                 }}
+                onFocus={() => setShowDropdown(true)}
+                onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
                 required
               />
-              <datalist id="mangas-list">
-                {mangas.map((m) => (
-                  <option key={m.id} value={m.title} />
-                ))}
-              </datalist>
+              {showDropdown && (
+                <div style={{
+                  position: "absolute",
+                  top: "100%",
+                  left: 0,
+                  right: 0,
+                  maxHeight: 250,
+                  overflowY: "auto",
+                  background: "var(--bg-secondary)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius-md)",
+                  zIndex: 50,
+                  marginTop: 4,
+                  boxShadow: "0 10px 25px rgba(0,0,0,0.5)"
+                }}>
+                  {mangas
+                    .filter(m => m.title.toLowerCase().includes(searchQuery.toLowerCase()))
+                    .slice(0, 50)
+                    .map(m => (
+                      <div
+                        key={m.id}
+                        style={{
+                          padding: "10px 14px",
+                          cursor: "pointer",
+                          borderBottom: "1px solid var(--border-light)",
+                          color: "var(--text-primary)"
+                        }}
+                        onMouseDown={(e) => {
+                          e.preventDefault(); // Evita que el onBlur se dispare antes
+                          setSearchQuery(m.title);
+                          setSelectedMangaId(m.id || "");
+                          setShowDropdown(false);
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = "var(--bg-hover)"}
+                        onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+                      >
+                        {m.title}
+                      </div>
+                  ))}
+                  {mangas.filter(m => m.title.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
+                    <div style={{ padding: "10px 14px", color: "var(--text-muted)" }}>
+                      No se encontraron resultados
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 12 }}>
