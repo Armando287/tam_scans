@@ -4,7 +4,8 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { useAuth } from "@/contexts/AuthContext";
-import { getManga, getChapters, Manga, Chapter, updateUserProfile } from "@/lib/firestore";
+import { getManga, getChapters, Manga, Chapter } from "@/lib/firestore";
+import { supabase } from "@/lib/supabase";
 import { useToast } from "@/contexts/ToastContext";
 
 const CHAPTERS_PER_PAGE = 20;
@@ -51,10 +52,17 @@ export default function MangaPage() {
       : [...currentBookmarks, id];
     
     try {
-      await updateUserProfile(user.uid, { bookmarks: newBookmarks });
+      const { error } = await supabase
+        .from("users")
+        .update({ bookmarks: newBookmarks })
+        .eq("id", user.uid);
+        
+      if (error) throw error;
+      
       await refreshProfile();
       showToast(isBookmarked ? "Eliminado de la biblioteca" : "Añadido a la biblioteca", "success");
     } catch (error) {
+      console.error(error);
       showToast("Error al actualizar la biblioteca", "error");
     }
   };

@@ -3,7 +3,8 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { getChapter, getChapters, Chapter, updateUserProfile } from "@/lib/firestore";
+import { getChapter, getChapters, Chapter } from "@/lib/firestore";
+import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
 
 type ReadMode = "vertical" | "horizontal" | "webtoon" | "pdf";
@@ -183,8 +184,12 @@ export default function ReaderPage() {
       const newHistory = { ...profile.readHistory };
       newHistory[id] = [...readChapters, chapterId];
       
-      updateUserProfile(profile.uid, { readHistory: newHistory })
-        .then(() => {
+      supabase
+        .from("users")
+        .update({ readHistory: newHistory })
+        .eq("id", profile.uid)
+        .then(({ error }) => {
+           if (error) throw error;
            hasMarkedRead.current = true;
            refreshProfile();
         })

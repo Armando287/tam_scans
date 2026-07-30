@@ -54,28 +54,30 @@ export default function AdminDashboard() {
       </div>
 
       {/* Quick actions */}
-      <div style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-lg)", padding: 20, marginBottom: 20 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 16 }}>Acciones rápidas</h2>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <a href="/admin/chapters" className="btn btn-primary btn-sm" id="admin-quick-chapters">
+      <div className="admin-card">
+        <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 20 }}>Acciones rápidas</h2>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <a href="/admin/chapters" className="btn btn-primary" id="admin-quick-chapters">
             ⏳ Revisar pendientes {stats?.pending ? `(${stats.pending})` : ""}
           </a>
-          <a href="/admin/mangas" className="btn btn-secondary btn-sm" id="admin-quick-new-manga">
+          <a href="/admin/mangas" className="btn btn-secondary" id="admin-quick-new-manga">
             ➕ Crear manga
           </a>
-          <a href="/admin/users" className="btn btn-secondary btn-sm" id="admin-quick-users">
+          <a href="/admin/users" className="btn btn-secondary" id="admin-quick-users">
             👥 Gestionar usuarios
           </a>
         </div>
       </div>
 
       {/* Info box */}
-      <div style={{ background: "rgba(124,58,237,0.06)", border: "1px solid rgba(124,58,237,0.15)", borderRadius: "var(--radius-lg)", padding: 20, fontSize: 14, color: "var(--text-secondary)", lineHeight: 1.7 }}>
-        <strong style={{ color: "var(--text-primary)" }}>ℹ️ Guía rápida</strong>
-        <ul style={{ marginTop: 10, paddingLeft: 20, display: "flex", flexDirection: "column", gap: 6 }}>
-          <li>Los capítulos subidos por usuarios quedan en estado <strong>Pendiente</strong> hasta que los apruebes.</li>
-          <li>Para crear un manga nuevo, ve a la sección <strong>Mangas</strong> y usa el botón Crear.</li>
-          <li>Puedes banear usuarios desde la sección <strong>Usuarios</strong>.</li>
+      <div className="admin-card" style={{ background: "rgba(139, 92, 246, 0.05)", borderColor: "rgba(139, 92, 246, 0.2)" }}>
+        <h2 style={{ fontSize: 16, fontWeight: 700, color: "var(--accent-primary)", marginBottom: 12 }}>
+          ℹ️ Guía rápida
+        </h2>
+        <ul style={{ paddingLeft: 20, display: "flex", flexDirection: "column", gap: 8, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+          <li>Los capítulos subidos por usuarios quedan en estado <strong style={{color:"white"}}>Pendiente</strong> hasta que los apruebes.</li>
+          <li>Para crear un manga nuevo, ve a la sección <strong style={{color:"white"}}>Mangas</strong> y usa el botón Crear.</li>
+          <li>Puedes banear usuarios desde la sección <strong style={{color:"white"}}>Usuarios</strong>.</li>
           <li>Para dar acceso de admin a alguien, busca al usuario y selecciona "Hacer admin".</li>
         </ul>
       </div>

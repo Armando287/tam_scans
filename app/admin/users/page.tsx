@@ -27,6 +27,8 @@ export default function AdminUsers() {
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
 
   async function load() {
     const token = await getToken();
@@ -58,20 +60,24 @@ export default function AdminUsers() {
     !search || u.email?.toLowerCase().includes(search.toLowerCase()) || u.displayName?.toLowerCase().includes(search.toLowerCase())
   );
 
+  const totalPages = Math.ceil(filtered.length / pageSize);
+  const paginated = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  useEffect(() => { setCurrentPage(1); }, [search]);
+
   return (
     <div className="animate-fade-in">
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
         <h1 className="admin-page-title" style={{ margin: 0 }} id="admin-users-title">👥 Usuarios</h1>
-        <div style={{ position: "relative" }}>
-          <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }}>🔍</span>
+        <div className="admin-search-wrap">
+          <span className="admin-search-icon">🔍</span>
           <input
             id="admin-users-search"
             type="search"
-            className="form-input"
+            className="admin-search-input"
             placeholder="Buscar usuario..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            style={{ paddingLeft: 36, minHeight: 40, width: 220 }}
           />
         </div>
       </div>
@@ -94,7 +100,7 @@ export default function AdminUsers() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((u) => (
+              {paginated.map((u) => (
                 <tr key={u.id} id={`user-row-${u.id}`}>
                   <td style={{ fontWeight: 600 }}>{u.displayName || "—"}</td>
                   <td style={{ fontSize: 12, maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis" }}>{u.email}</td>
@@ -150,8 +156,25 @@ export default function AdminUsers() {
               ))}
             </tbody>
           </table>
+          
+          {filtered.length > 0 && (
+            <div className="pagination">
+              <div className="pagination-info">
+                Mostrando {(currentPage - 1) * pageSize + 1} a {Math.min(currentPage * pageSize, filtered.length)} de {filtered.length}
+              </div>
+              <div className="pagination-controls">
+                <button className="btn btn-secondary btn-sm" disabled={currentPage === 1} onClick={() => setCurrentPage(c => c - 1)}>
+                  Anterior
+                </button>
+                <button className="btn btn-secondary btn-sm" disabled={currentPage === totalPages || totalPages === 0} onClick={() => setCurrentPage(c => c + 1)}>
+                  Siguiente
+                </button>
+              </div>
+            </div>
+          )}
+
           {filtered.length === 0 && (
-            <div className="empty-state">
+            <div className="empty-state" style={{ border: "none", margin: 0 }}>
               <div className="empty-state-icon">👤</div>
               <div className="empty-state-title">{search ? "Sin resultados" : "Sin usuarios registrados"}</div>
             </div>

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState, Suspense, useRef } from "react";
 import Link from "next/link";
 import { getMangas, Manga } from "@/lib/firestore";
 import MangaCard from "@/components/MangaCard";
@@ -11,6 +11,7 @@ function HomeContent() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+  const carouselRef = useRef<HTMLDivElement>(null);
 
   const fetchInitial = async () => {
     setLoading(true);
@@ -48,6 +49,13 @@ function HomeContent() {
   const recentMangas = mangas; // Show all in recent updates
   const popularMangas = [...mangas].sort((a, b) => b.title.localeCompare(a.title)).slice(0, 6); // Just a visual mock for "Populares" using sorting
 
+  const scrollLeft = () => {
+    if (carouselRef.current) carouselRef.current.scrollBy({ left: -350, behavior: "smooth" });
+  };
+  const scrollRight = () => {
+    if (carouselRef.current) carouselRef.current.scrollBy({ left: 350, behavior: "smooth" });
+  };
+
   return (
     <>
       {/* App Header Mobile */}
@@ -81,10 +89,18 @@ function HomeContent() {
           {/* Featured Carousel */}
           {featuredMangas.length > 0 && (
             <div className="featured-section">
-              <div className="section-header">
+              <div className="section-header" style={{ alignItems: "center" }}>
                 <h2 className="section-title">Destacados</h2>
+                <div style={{ display: "flex", gap: 8 }} className="desktop-only-arrows">
+                  <button onClick={scrollLeft} style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)", color: "white", fontSize: 18, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    &larr;
+                  </button>
+                  <button onClick={scrollRight} style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)", color: "white", fontSize: 18, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    &rarr;
+                  </button>
+                </div>
               </div>
-              <div className="featured-carousel">
+              <div className="featured-carousel" ref={carouselRef}>
                 {featuredMangas.map((manga) => (
                   <Link href={`/manga/${manga.id}`} key={manga.id} className="featured-card">
                     <div className="featured-image-wrap">

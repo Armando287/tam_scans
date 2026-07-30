@@ -29,6 +29,9 @@ export default function AdminChapters() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | "pending" | "published" | "rejected">("pending");
   const [acting, setActing] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
 
   async function load() {
     const token = await getToken();
@@ -63,13 +66,36 @@ export default function AdminChapters() {
     setActing(null);
   }
 
-  const filtered = chapters.filter((c) => filter === "all" || c.status === filter);
+  const filtered = chapters.filter((c) => {
+    const matchFilter = filter === "all" || c.status === filter;
+    const matchSearch = !search || 
+      c.mangaId.toLowerCase().includes(search.toLowerCase()) || 
+      c.title?.toLowerCase().includes(search.toLowerCase()) ||
+      c.uploaderEmail?.toLowerCase().includes(search.toLowerCase());
+    return matchFilter && matchSearch;
+  });
+
+  const totalPages = Math.ceil(filtered.length / pageSize);
+  const paginated = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  // Reset page on filter/search change
+  useEffect(() => { setCurrentPage(1); }, [filter, search]);
 
   return (
     <div className="animate-fade-in">
-      <h1 className="admin-page-title" id="admin-chapters-title">
-        📋 Capítulos
-      </h1>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
+        <h1 className="admin-page-title" style={{ margin: 0 }} id="admin-chapters-title">📋 Capítulos</h1>
+        <div className="admin-search-wrap">
+          <span className="admin-search-icon">🔍</span>
+          <input 
+            type="text" 
+            className="admin-search-input" 
+            placeholder="Buscar por ID, título o email..." 
+            value={search} 
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+      </div>
 
       {/* Filter tabs */}
       <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
@@ -112,7 +138,7 @@ export default function AdminChapters() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((ch) => (
+              {paginated.map((ch) => (
                 <tr key={ch.id} id={`chapter-row-${ch.id}`}>
                   <td style={{ maxWidth: 100, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 12 }}>
                     <a href={`/manga/${ch.mangaId}`} target="_blank" rel="noopener" style={{ color: "var(--accent-secondary)" }}>
@@ -166,6 +192,22 @@ export default function AdminChapters() {
               ))}
             </tbody>
           </table>
+          
+          {filtered.length > 0 && (
+            <div className="pagination">
+              <div className="pagination-info">
+                Mostrando {(currentPage - 1) * pageSize + 1} a {Math.min(currentPage * pageSize, filtered.length)} de {filtered.length}
+              </div>
+              <div className="pagination-controls">
+                <button className="btn btn-secondary btn-sm" disabled={currentPage === 1} onClick={() => setCurrentPage(c => c - 1)}>
+                  Anterior
+                </button>
+                <button className="btn btn-secondary btn-sm" disabled={currentPage === totalPages || totalPages === 0} onClick={() => setCurrentPage(c => c + 1)}>
+                  Siguiente
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

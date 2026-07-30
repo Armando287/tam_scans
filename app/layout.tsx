@@ -2,9 +2,6 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ToastProvider } from "@/contexts/ToastContext";
-import BottomNav from "@/components/BottomNav";
-import Sidebar from "@/components/Sidebar";
-import MainLayout from "@/components/MainLayout";
 
 export const metadata: Metadata = {
   title: "MangaVerse — Lee y descubre mangas",
@@ -32,9 +29,7 @@ export default function RootLayout({
       <body>
         <AuthProvider>
           <ToastProvider>
-            <Sidebar />
-            <MainLayout>{children}</MainLayout>
-            <BottomNav />
+            {children}
           </ToastProvider>
         </AuthProvider>
       </body>

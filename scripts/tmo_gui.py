@@ -7,6 +7,8 @@ import json
 import os
 from dotenv import load_dotenv
 import threading
+import concurrent.futures
+import time
 
 # Load environment variables to get Supabase credentials
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env.local'))
@@ -28,6 +30,7 @@ class TMOScraperApp(ctk.CTk):
         self.session_token = None
         self.manga_data = None
         self.base_url = "http://localhost:3000"
+        self.mangas_list = [] # List of dicts: {"id": "...", "title": "..."}
         
         # Layout Config
         self.grid_columnconfigure(1, weight=1)
@@ -75,17 +78,26 @@ class TMOScraperApp(ctk.CTk):
         
         # Scraper Section
         self.url_label = ctk.CTkLabel(self.main_frame, text="Importar desde ZonaTMO", font=ctk.CTkFont(size=18, weight="bold"))
-        self.url_label.grid(row=0, column=0, padx=20, pady=(20, 10), sticky="w")
+        self.url_label.grid(row=0, column=0, padx=20, pady=(20, 5), sticky="w")
         
-        self.url_entry = ctk.CTkEntry(self.main_frame, placeholder_text="URL del manga (Ej: https://zonatmo.org/library/manga/...)")
-        self.url_entry.grid(row=1, column=0, padx=20, pady=5, sticky="ew")
+        self.manga_select_label = ctk.CTkLabel(self.main_frame, text="1. Selecciona el Manga de tu BD (o deja 'Crear Manga Nuevo'):")
+        self.manga_select_label.grid(row=1, column=0, padx=20, pady=5, sticky="w")
+        
+        self.manga_select = ctk.CTkComboBox(self.main_frame, values=["[ Crear Manga Nuevo ]"], width=400)
+        self.manga_select.grid(row=2, column=0, padx=20, pady=5, sticky="w")
+        
+        self.url_entry_label = ctk.CTkLabel(self.main_frame, text="2. Pega la URL de ZonaTMO:")
+        self.url_entry_label.grid(row=3, column=0, padx=20, pady=5, sticky="w")
+        
+        self.url_entry = ctk.CTkEntry(self.main_frame, placeholder_text="Ej: https://zonatmo.org/library/manga/...", width=600)
+        self.url_entry.grid(row=4, column=0, padx=20, pady=5, sticky="w")
         
         self.analyze_btn = ctk.CTkButton(self.main_frame, text="Analizar Manga", command=self.analyze_manga)
-        self.analyze_btn.grid(row=2, column=0, padx=20, pady=10, sticky="w")
+        self.analyze_btn.grid(row=5, column=0, padx=20, pady=10, sticky="w")
         
         # Details & Log Section
         self.tabview = ctk.CTkTabview(self.main_frame)
-        self.tabview.grid(row=3, column=0, padx=20, pady=10, sticky="nsew")
+        self.tabview.grid(row=6, column=0, padx=20, pady=10, sticky="nsew")
         
         self.tabview.add("Información")
         self.tabview.add("Progreso (Log)")
@@ -100,13 +112,13 @@ class TMOScraperApp(ctk.CTk):
         
         # Action Buttons
         self.action_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
-        self.action_frame.grid(row=4, column=0, padx=20, pady=20, sticky="e")
+        self.action_frame.grid(row=7, column=0, padx=20, pady=20, sticky="e")
         
         self.upload_btn = ctk.CTkButton(self.action_frame, text="Subir Todo a BD", command=self.start_upload, state="disabled", fg_color="green", hover_color="darkgreen")
         self.upload_btn.pack(side="right")
         
         self.progress_bar = ctk.CTkProgressBar(self.main_frame)
-        self.progress_bar.grid(row=5, column=0, padx=20, pady=(0, 20), sticky="ew")
+        self.progress_bar.grid(row=8, column=0, padx=20, pady=(0, 20), sticky="ew")
         self.progress_bar.set(0)
 
     def log(self, message):
@@ -146,6 +158,18 @@ class TMOScraperApp(ctk.CTk):
                     self.session_token = data["access_token"]
                     self.status_label.configure(text="Estado: Conectado ✅", text_color="green")
                     self.log("✅ Sesión iniciada correctamente (Supabase Auth).")
+                    
+                    # Fetch manga list
+                    self.log("Obteniendo lista de mangas de la BD...")
+                    mangas_res = requests.get(f"{self.base_url}/api/admin?action=mangas", headers={"Authorization": f"Bearer {self.session_token}"})
+                    if mangas_res.ok:
+                        self.mangas_list = mangas_res.json().get("mangas", [])
+                        options = ["[ Crear Manga Nuevo ]"] + [m["title"] for m in self.mangas_list]
+                        self.manga_select.configure(values=options)
+                        self.log(f"✅ {len(self.mangas_list)} mangas cargados en el selector.")
+                    else:
+                        self.log("⚠️ No se pudo obtener la lista de mangas.")
+                        
                 else:
                     err_msg = data.get("error_description", data.get("msg", "Error de credenciales"))
                     self.status_label.configure(text="Estado: Error ❌", text_color="red")
@@ -282,38 +306,42 @@ class TMOScraperApp(ctk.CTk):
                     "Content-Type": "application/json"
                 }
                 
-                # 1. Search or Create Manga
-                self.log("[1] Verificando Manga en la Base de Datos...")
-                search_payload = {
-                    "action": "search-manga",
-                    "data": {"title": self.manga_data["title"]}
-                }
-                search_res = requests.post(f"{self.base_url}/api/admin", headers=headers, json=search_payload)
-                if not search_res.ok:
-                    raise Exception(f"Fallo al buscar manga: {search_res.text}")
-                    
-                search_data = search_res.json()
-                manga_id = search_data.get("id")
-                existing_chapters = search_data.get("existingChapters", [])
+                # 1. Obtenemos Manga Seleccionado
+                selected_title = self.manga_select.get()
+                manga_id = None
+                existing_chapters = []
                 
-                if manga_id:
-                    self.log(f"✅ Manga encontrado (ID: {manga_id}). Omitiremos capítulos existentes.")
-                    
-                    # Update Manga Data (optional, but good to keep it fresh)
-                    update_payload = {
-                        "action": "update-manga",
-                        "id": manga_id,
-                        "data": {
-                            "description": self.manga_data["description"],
-                            "author": self.manga_data["author"],
-                            "coverUrl": self.manga_data["coverUrl"],
-                            "genres": self.manga_data["genres"]
+                if selected_title != "[ Crear Manga Nuevo ]":
+                    # Find manga ID
+                    manga_obj = next((m for m in self.mangas_list if m["title"] == selected_title), None)
+                    if manga_obj:
+                        manga_id = manga_obj["id"]
+                        self.log(f"[1] Manga seleccionado de la BD: {selected_title} (ID: {manga_id})")
+                        
+                        # Fetch existing chapters for this manga
+                        self.log(f"-> Verificando qué capítulos ya están subidos...")
+                        chap_res = requests.get(f"{self.base_url}/api/admin?action=manga-chapters&mangaId={manga_id}", headers=headers)
+                        if chap_res.ok:
+                            existing_chapters = chap_res.json().get("existingChapters", [])
+                            self.log(f"-> {len(existing_chapters)} capítulos encontrados en la BD para omitir.")
+                        else:
+                            self.log("⚠️ Fallo al obtener capítulos existentes. Puede que se intenten subir duplicados.")
+                            
+                        # Opcional: Actualizar datos del manga
+                        update_payload = {
+                            "action": "update-manga",
+                            "id": manga_id,
+                            "data": {
+                                "description": self.manga_data["description"],
+                                "author": self.manga_data["author"],
+                                "coverUrl": self.manga_data["coverUrl"],
+                                "genres": self.manga_data["genres"]
+                            }
                         }
-                    }
-                    requests.post(f"{self.base_url}/api/admin", headers=headers, json=update_payload)
-                    
+                        requests.post(f"{self.base_url}/api/admin", headers=headers, json=update_payload)
                 else:
-                    self.log("✅ Manga nuevo, creándolo...")
+                    # Crear nuevo manga
+                    self.log("[1] Creando Nuevo Manga en la Base de Datos...")
                     manga_payload = {
                         "action": "create-manga",
                         "data": {
@@ -367,25 +395,43 @@ class TMOScraperApp(ctk.CTk):
                         
                     self.log(f"   -> Encontradas {len(images)} imágenes. Subiéndolas a Storage...")
                     
-                    # Upload images
-                    uploaded_pages = []
+                    # Upload images concurrently
+                    uploaded_pages = [None] * len(images)
                     
+                    def _upload_image(idx, url):
+                        retries = 3
+                        for attempt in range(retries):
+                            try:
+                                up_res = requests.post(
+                                    f"{self.base_url}/api/upload/external",
+                                    headers=headers,
+                                    json={
+                                        "url": url,
+                                        "mangaId": manga_id,
+                                        "chapterNumber": chapter_number,
+                                        "pageIndex": str(idx)
+                                    },
+                                    timeout=30 # Add timeout
+                                )
+                                if up_res.ok:
+                                    uploaded_pages[idx] = up_res.json().get("url")
+                                    return True
+                                else:
+                                    self.log(f"   ⚠️ Reintentando img {idx+1} (Intento {attempt+1}): {up_res.text}")
+                                    time.sleep(2)
+                            except Exception as e:
+                                self.log(f"   ⚠️ Reintentando img {idx+1} tras error: {e}")
+                                time.sleep(2)
+                        
+                        self.log(f"   ❌ Fallo definitivo subiendo imagen {idx+1}")
+                        return False
+
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+                        futures = [executor.submit(_upload_image, j, img_url) for j, img_url in enumerate(images)]
+                        concurrent.futures.wait(futures)
                     
-                    for j, img_url in enumerate(images):
-                        up_res = requests.post(
-                            f"{self.base_url}/api/upload/external",
-                            headers=headers,
-                            json={
-                                "url": img_url,
-                                "mangaId": manga_id,
-                                "chapterNumber": chapter_number,
-                                "pageIndex": str(j)
-                            }
-                        )
-                        if up_res.ok:
-                            uploaded_pages.append(up_res.json().get("url"))
-                        else:
-                            self.log(f"   ❌ Fallo subiendo imagen {j+1}")
+                    # Remove any Nones if there were complete failures
+                    uploaded_pages = [p for p in uploaded_pages if p is not None]
                     
                     if uploaded_pages:
                         self.log(f"   -> Guardando {chap['title']} en la Base de Datos...")

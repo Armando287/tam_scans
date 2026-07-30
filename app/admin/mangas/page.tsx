@@ -27,9 +27,9 @@ export default function AdminMangas() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<MangaFormData>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
-  
-
-
+  const [search, setSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
   async function load() {
     setLoading(true);
     getMangas(100).then(setMangas).finally(() => setLoading(false));
@@ -91,13 +91,32 @@ export default function AdminMangas() {
     else showToast("Error al eliminar", "error");
   }
 
+  const filtered = mangas.filter(m => 
+    !search || 
+    m.title.toLowerCase().includes(search.toLowerCase()) || 
+    (m.author && m.author.toLowerCase().includes(search.toLowerCase()))
+  );
+
+  const totalPages = Math.ceil(filtered.length / pageSize);
+  const paginated = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
   return (
     <div className="animate-fade-in">
-
-
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
         <h1 className="admin-page-title" style={{ margin: 0 }} id="admin-mangas-title">📚 Mangas</h1>
-        <button className="btn btn-primary" onClick={openCreate} id="admin-create-manga-btn">➕ Crear manga</button>
+        <div style={{ display: "flex", gap: 12, flex: 1, justifyContent: "flex-end", flexWrap: "wrap" }}>
+          <div className="admin-search-wrap">
+            <span className="admin-search-icon">🔍</span>
+            <input 
+              type="text" 
+              className="admin-search-input" 
+              placeholder="Buscar por título o autor..." 
+              value={search} 
+              onChange={e => { setSearch(e.target.value); setCurrentPage(1); }}
+            />
+          </div>
+          <button className="btn btn-primary" onClick={openCreate} id="admin-create-manga-btn">➕ Crear manga</button>
+        </div>
       </div>
 
       {loading ? (
@@ -115,7 +134,7 @@ export default function AdminMangas() {
               </tr>
             </thead>
             <tbody>
-              {mangas.map((m) => (
+              {paginated.map((m) => (
                 <tr key={m.id} id={`manga-row-${m.id}`}>
                   <td style={{ fontWeight: 600, maxWidth: 180 }}>{m.title}</td>
                   <td style={{ fontSize: 13, color: "var(--text-secondary)" }}>{m.author}</td>
@@ -131,7 +150,29 @@ export default function AdminMangas() {
               ))}
             </tbody>
           </table>
-          {mangas.length === 0 && <div className="empty-state"><div className="empty-state-icon">📭</div><div className="empty-state-title">Sin mangas aún</div></div>}
+          
+          {filtered.length > 0 && (
+            <div className="pagination">
+              <div className="pagination-info">
+                Mostrando {(currentPage - 1) * pageSize + 1} a {Math.min(currentPage * pageSize, filtered.length)} de {filtered.length}
+              </div>
+              <div className="pagination-controls">
+                <button className="btn btn-secondary btn-sm" disabled={currentPage === 1} onClick={() => setCurrentPage(c => c - 1)}>
+                  Anterior
+                </button>
+                <button className="btn btn-secondary btn-sm" disabled={currentPage === totalPages || totalPages === 0} onClick={() => setCurrentPage(c => c + 1)}>
+                  Siguiente
+                </button>
+              </div>
+            </div>
+          )}
+
+          {filtered.length === 0 && (
+            <div className="empty-state" style={{ border: "none", margin: 0 }}>
+              <div className="empty-state-icon">{search ? "🔍" : "📭"}</div>
+              <div className="empty-state-title">{search ? "Sin resultados" : "Sin mangas aún"}</div>
+            </div>
+          )}
         </div>
       )}
 

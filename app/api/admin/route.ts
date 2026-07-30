@@ -56,6 +56,18 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ users: users || [] });
     }
 
+    if (action === "mangas") {
+      const { data: mangas } = await client.from("mangas").select("id, title").order("title", { ascending: true });
+      return NextResponse.json({ mangas: mangas || [] });
+    }
+
+    if (action === "manga-chapters") {
+      const mangaId = searchParams.get("mangaId");
+      if (!mangaId) return NextResponse.json({ error: "Missing mangaId" }, { status: 400 });
+      const { data: existingChapters } = await client.from("chapters").select("number").eq("mangaId", mangaId);
+      return NextResponse.json({ existingChapters: existingChapters?.map(c => c.number) || [] });
+    }
+
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 403 });
