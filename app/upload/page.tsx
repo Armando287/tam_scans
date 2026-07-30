@@ -35,14 +35,7 @@ export default function UploadPage() {
   const [submitted, setSubmitted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [importStatus, setImportStatus] = useState<{
-    type: "idle" | "fetching_manga" | "fetching_chapters" | "uploading_pages" | "done" | "error";
-    totalChapters?: number;
-    currentChapter?: number;
-    totalPages?: number;
-    currentPage?: number;
-    message?: string;
-  }>({ type: "idle" });
+
 
   useEffect(() => {
     getMangas(50).then(setMangas).catch(console.error);
@@ -138,124 +131,7 @@ export default function UploadPage() {
     });
   }
 
-  async function startChapterImport(mangaId: string, chapters: any[]) {
-      const existingChapters = await getChapters(mangaId, { allStatuses: true });
-      const existingNumbers = new Set(existingChapters.map((c: any) => c.number));
-      
-      const newChapters = chapters.filter((chap: any) => {
-          const num = chap.title.match(/(\d+(\.\d+)?)/)?.[0];
-          if (!num) return true;
-          if (num.includes('.')) return false; // Skip chapters like 16.1
-          return !existingNumbers.has(parseFloat(num));
-      });
 
-      if (newChapters.length === 0) {
-          showToast("Todos los capítulos encontrados ya han sido subidos previamente.", "error");
-          setImportStatus({ type: "idle" });
-          return;
-      }
-
-      if (!confirm(`Se encontraron ${newChapters.length} capítulos nuevos (se omitieron ${chapters.length - newChapters.length} ya existentes). ¿Deseas descargar y subir todas sus imágenes ahora? ADVERTENCIA: Esto puede tardar mucho tiempo y NO debes cerrar la pestaña.`)) {
-          setImportStatus({ type: "idle" });
-          return;
-      }
-      
-      setImportStatus({ type: "fetching_chapters", totalChapters: newChapters.length, currentChapter: 0, message: "Iniciando descarga masiva..." });
-      
-      const token = await getToken();
-      
-      for (let i = 0; i < newChapters.length; i++) {
-          const chap = newChapters[i];
-          setImportStatus({ type: "fetching_chapters", totalChapters: newChapters.length, currentChapter: i + 1, message: `Analizando ${chap.title}...` });
-          
-          try {
-             const res = await fetch(`/api/scrape?action=chapter&url=${encodeURIComponent(chap.url)}`);
-             const data = await res.json();
-             if (!data.images || data.images.length === 0) continue;
-             
-             const uploadedPages: string[] = new Array(data.images.length);
-             const chapterNumber = chap.title.match(/(\d+(\.\d+)?)/)?.[0] || String(i+1);
-             
-             let completedPages = 0;
-             const MAX_CONCURRENCY = 100;
-             
-             const uploadTasks = data.images.map((imgUrl: string, j: number) => async () => {
-                 const upRes = await fetch("/api/upload/external", {
-                     method: "POST",
-                     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-                     body: JSON.stringify({
-                         url: imgUrl,
-                         mangaId: mangaId,
-                         chapterNumber: chapterNumber,
-                         pageIndex: String(j)
-                     })
-                 });
-                 if (upRes.ok) {
-                     const upData = await upRes.json();
-                     uploadedPages[j] = upData.url;
-                 }
-                 completedPages++;
-                 setImportStatus({ 
-                    type: "uploading_pages", 
-                    totalChapters: newChapters.length, 
-                    currentChapter: i + 1,
-                    totalPages: data.images.length,
-                    currentPage: completedPages,
-                    message: `Subiendo imágenes (${completedPages}/${data.images.length}) del ${chap.title} 🚀`
-                 });
-             });
-
-             for (let t = 0; t < uploadTasks.length; t += MAX_CONCURRENCY) {
-                 const batch = uploadTasks.slice(t, t + MAX_CONCURRENCY);
-                 await Promise.all(batch.map((task: any) => task()));
-             }
-             
-             const finalPages = uploadedPages.filter(Boolean);
-             
-             if (finalPages.length > 0) {
-                 await createChapter({
-                     mangaId: mangaId,
-                     number: parseFloat(chapterNumber),
-                     title: chap.title,
-                     pages: finalPages,
-                     fileType: "images",
-                     uploadedBy: user!.uid,
-                     uploaderEmail: user!.email || "",
-                     status: profile?.isAdmin ? "published" : "pending",
-                 });
-             }
-          } catch(e) {
-             console.error("Error importing chapter", e);
-          }
-      }
-      
-      setImportStatus({ type: "done", message: "¡Importación masiva completada! 🎉" });
-      setTimeout(() => {
-          setImportStatus({ type: "idle" });
-      }, 4000);
-  }
-
-  async function handleAutoImport() {
-    const url = (document.getElementById("import-url") as HTMLInputElement).value;
-    if (!url || !selectedMangaId) return;
-    
-    setImportStatus({ type: "fetching_manga", message: "Buscando capítulos..." });
-    try {
-      const res = await fetch(`/api/scrape?url=${encodeURIComponent(url)}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Error al raspar");
-      
-      if (data.chapters && data.chapters.length > 0) {
-          await startChapterImport(selectedMangaId, data.chapters);
-      } else {
-          showToast("No se encontraron capítulos.", "error");
-          setImportStatus({ type: "idle" });
-      }
-    } catch (err: any) {
-      showToast(err.message, "error");
-      setImportStatus({ type: "idle" });
-    }
-  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -321,50 +197,7 @@ export default function UploadPage() {
 
   return (
     <div className="upload-page animate-fade-in">
-      {/* Import Progress Overlay */}
-      {importStatus.type !== "idle" && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.8)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(5px)" }}>
-           <div style={{ background: "var(--card-bg)", padding: 40, borderRadius: 16, width: "100%", maxWidth: 500, textAlign: "center", border: "1px solid var(--border-color)" }}>
-               <h2 style={{ marginBottom: 20, color: "var(--text-primary)" }}>
-                 {importStatus.type === "done" ? "¡Completado!" : "Importando Capítulos..."}
-               </h2>
-               
-               <p style={{ color: "var(--text-secondary)", marginBottom: 30, fontSize: 16 }}>{importStatus.message}</p>
-               
-               {importStatus.type !== "fetching_manga" && importStatus.type !== "done" && (
-                 <>
-                   <div style={{ marginBottom: 15 }}>
-                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5, fontSize: 13, color: "var(--text-muted)" }}>
-                        <span>Progreso de Capítulos</span>
-                        <span>{importStatus.currentChapter} / {importStatus.totalChapters}</span>
-                     </div>
-                     <div style={{ height: 8, background: "var(--bg-primary)", borderRadius: 4, overflow: "hidden" }}>
-                        <div style={{ height: "100%", background: "var(--accent-primary)", width: `${((importStatus.currentChapter || 0) / (importStatus.totalChapters || 1)) * 100}%`, transition: "width 0.3s ease" }} />
-                     </div>
-                   </div>
-                   
-                   {importStatus.type === "uploading_pages" && (
-                       <div>
-                         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5, fontSize: 13, color: "var(--text-muted)" }}>
-                            <span>Descargando/Subiendo Imágenes</span>
-                            <span>{importStatus.currentPage} / {importStatus.totalPages}</span>
-                         </div>
-                         <div style={{ height: 8, background: "var(--bg-primary)", borderRadius: 4, overflow: "hidden" }}>
-                            <div style={{ height: "100%", background: "#10b981", width: `${((importStatus.currentPage || 0) / (importStatus.totalPages || 1)) * 100}%`, transition: "width 0.3s ease" }} />
-                         </div>
-                       </div>
-                   )}
-                 </>
-               )}
-               
-               {importStatus.type !== "done" && importStatus.type !== "fetching_manga" && (
-                   <p style={{ color: "#ef4444", fontSize: 13, marginTop: 20, fontWeight: 500 }}>
-                     ⚠️ NO CIERRES ESTA PESTAÑA HASTA QUE TERMINE
-                   </p>
-               )}
-           </div>
-        </div>
-      )}
+
 
       <div className="upload-header">
         <h1 className="upload-title gradient-text">Subir Scans</h1>
@@ -381,18 +214,23 @@ export default function UploadPage() {
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <div className="form-group">
               <label htmlFor="upload-manga-select" className="form-label">Manga</label>
-              <select
+              <input
                 id="upload-manga-select"
-                className="form-input form-select"
-                value={selectedMangaId}
-                onChange={(e) => setSelectedMangaId(e.target.value)}
+                list="mangas-list"
+                className="form-input"
+                placeholder="Busca y selecciona un manga..."
+                onChange={(e) => {
+                  const selectedTitle = e.target.value;
+                  const selected = mangas.find(m => m.title === selectedTitle);
+                  setSelectedMangaId(selected ? selected.id : "");
+                }}
                 required
-              >
-                <option value="">Selecciona un manga...</option>
+              />
+              <datalist id="mangas-list">
                 {mangas.map((m) => (
-                  <option key={m.id} value={m.id}>{m.title}</option>
+                  <option key={m.id} value={m.title} />
                 ))}
-              </select>
+              </datalist>
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 12 }}>
@@ -425,32 +263,7 @@ export default function UploadPage() {
           </div>
         </div>
 
-        {/* Import from URL Section */}
-        <div className="upload-section">
-          <div className="upload-section-title">🔗 Importar Capítulos desde URL</div>
-          <div className="form-group" style={{ background: "rgba(124,58,237,0.1)", padding: 12, borderRadius: 8, border: "1px dashed var(--accent-primary)" }}>
-            <label htmlFor="import-url" className="form-label">URL del Manga (ZonaTMO)</label>
-            <div style={{ display: "flex", gap: 8 }}>
-              <input 
-                id="import-url" 
-                className="form-input" 
-                placeholder="https://zonatmo.org/..." 
-                style={{ flex: 1 }} 
-              />
-              <button 
-                className="btn btn-primary" 
-                type="button" 
-                onClick={handleAutoImport}
-                disabled={!selectedMangaId}
-              >
-                 {importStatus.type !== "idle" && importStatus.type !== "done" ? "⏳" : "Importar"}
-              </button>
-            </div>
-            <small style={{ color: "var(--text-muted)", marginTop: 4, display: "block" }}>
-              {!selectedMangaId ? "⚠️ Primero selecciona un manga arriba ⬆️" : "Descargará todos los capítulos que falten de este manga automáticamente (100 en 100)."}
-            </small>
-          </div>
-        </div>
+
 
         {/* File Upload */}
         <div className="upload-section">
