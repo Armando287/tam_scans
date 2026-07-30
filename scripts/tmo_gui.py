@@ -256,7 +256,17 @@ class TMOScraperApp(ctk.CTk):
                 soup = BeautifulSoup(html, 'html.parser')
                 
                 # Title
-                title_el = soup.select_one("h1.element-title, .post-title h1, .infox h1, h1[itemprop='name'], .series-title, h1, .entry-title")
+                title_el = None
+                for sel in ["h1.element-title", ".post-title h1", ".infox h1", "h1[itemprop='name']", ".series-title", ".entry-title"]:
+                    title_el = soup.select_one(sel)
+                    if title_el: break
+                
+                if not title_el:
+                    for h1 in soup.select("h1"):
+                        if h1.text.strip().lower() not in ["manga", "manhwa", "manhua", "comic", "novela", "doujinshi"]:
+                            title_el = h1
+                            break
+
                 title = title_el.text.strip() if title_el else "Título Desconocido"
                 
                 # Description
@@ -412,20 +422,42 @@ class TMOScraperApp(ctk.CTk):
                     res = requests.post(f"{self.base_url}/api/admin", headers=headers, json=manga_payload)
                     manga_id = res.json().get("id")
                 
+                # Set of successfully uploaded chapters (prevents duplicate versions of the same chapter)
+                successful_chapters = set(float(c) for c in existing_chapters)
+
                 # 2. Descargar y Subir capítulos
                 chapters = self.manga_data["chapters"]
                 import cloudscraper
                 scraper = cloudscraper.create_scraper()
                 
                 total_chapters = len(chapters)
+                login_time = time.time()
                 for i, chap in enumerate(chapters):
+                    if time.time() - login_time > 3000: # 50 minutes
+                        self.log("⏳ Renovando sesión para evitar expiración de token...")
+                        auth_url = f"{SUPABASE_URL}/auth/v1/token?grant_type=password"
+                        email = self.email_entry.get().strip()
+                        password = self.password_entry.get().strip()
+                        try:
+                            token_res = requests.post(auth_url, headers={"apikey": SUPABASE_ANON_KEY}, json={"email": email, "password": password})
+                            if token_res.ok:
+                                self.session_token = token_res.json().get("access_token")
+                                headers["Authorization"] = f"Bearer {self.session_token}"
+                                login_time = time.time()
+                                self.log("✅ Sesión renovada con éxito.")
+                            else:
+                                self.log(f"⚠️ Fallo al renovar sesión: {token_res.text}")
+                        except Exception as e:
+                            self.log(f"⚠️ Excepción al renovar sesión: {e}")
+                            
                     try:
                         self.progress_bar.set((i) / total_chapters)
                         import re
                         match = re.search(r"(\d+(\.\d+)?)", chap['title'])
                         chapter_number = match.group(1) if match else str(i+1)
                         
-                        if float(chapter_number) in existing_chapters:
+                        if float(chapter_number) in successful_chapters:
+                            self.log(f"⏭️ Capítulo {chapter_number} ya subido. Saltando versión duplicada...")
                             continue
                             
                         self.log(f"[*] Analizando {chap['title']}")
@@ -557,6 +589,7 @@ class TMOScraperApp(ctk.CTk):
                                     }
                                 }
                             )
+                            successful_chapters.add(float(chapter_number))
                             self.log(f"✅ {chap['title']} importado.")
                     except Exception as e:
                         self.log(f"⚠️ Error inesperado en {chap['title']}, saltando al siguiente: {e}")

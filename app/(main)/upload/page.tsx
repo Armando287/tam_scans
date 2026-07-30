@@ -38,7 +38,7 @@ export default function UploadPage() {
 
 
   useEffect(() => {
-    getMangas(50).then(setMangas).catch(console.error);
+    getMangas(2000).then(setMangas).catch(console.error);
   }, []);
 
   // Redirect if not logged in or not verified
