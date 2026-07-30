@@ -3,7 +3,8 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { getChapter, getChapters, Chapter } from "@/lib/firestore";
+import { getChapter, getChapters, Chapter, updateUserProfile } from "@/lib/firestore";
+import { useAuth } from "@/contexts/AuthContext";
 
 type ReadMode = "vertical" | "horizontal" | "webtoon" | "pdf";
 
@@ -170,6 +171,28 @@ export default function ReaderPage() {
   const [currentPage, setCurrentPage] = useState(0);
   const [controlsVisible, setControlsVisible] = useState(true);
   const controlsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { profile, refreshProfile } = useAuth();
+  const hasMarkedRead = useRef(false);
+
+  // Mark chapter as read
+  useEffect(() => {
+    if (!profile?.uid || !id || !chapterId || hasMarkedRead.current) return;
+    
+    const readChapters = profile.readHistory?.[id] || [];
+    if (!readChapters.includes(chapterId)) {
+      const newHistory = { ...profile.readHistory };
+      newHistory[id] = [...readChapters, chapterId];
+      
+      updateUserProfile(profile.uid, { readHistory: newHistory })
+        .then(() => {
+           hasMarkedRead.current = true;
+           refreshProfile();
+        })
+        .catch(console.error);
+    } else {
+      hasMarkedRead.current = true;
+    }
+  }, [profile, id, chapterId, refreshProfile]);
 
   // Load saved mode preference
   useEffect(() => {

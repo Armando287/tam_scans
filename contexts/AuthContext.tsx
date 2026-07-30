@@ -10,6 +10,9 @@ interface UserProfile {
   isAdmin: boolean;
   isBanned: boolean;
   uploadCount: number;
+  avatarUrl?: string;
+  bookmarks?: string[];
+  readHistory?: Record<string, string[]>;
 }
 
 interface AuthContextType {
@@ -75,6 +78,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           isAdmin: data.isAdmin,
           isBanned: data.isBanned,
           uploadCount: data.uploadCount,
+          avatarUrl: data.avatarUrl,
+          bookmarks: data.bookmarks || [],
+          readHistory: data.readHistory || {},
         });
       }
     } catch (e) {

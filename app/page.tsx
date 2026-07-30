@@ -5,21 +5,47 @@ import { getMangas, Manga } from "@/lib/firestore";
 import MangaCard from "@/components/MangaCard";
 
 const GENRES = ["Todos", "Acción", "Romance", "Fantasía", "Terror", "Comedia", "Drama", "Aventura", "Sci-Fi", "Shonen", "Seinen", "Shojo"];
+const ITEMS_PER_PAGE = 20;
 
 function HomeContent() {
   const searchParams = useSearchParams();
   const query = searchParams.get("q") || "";
   const [mangas, setMangas] = useState<Manga[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [activeGenre, setActiveGenre] = useState("Todos");
+  const [hasMore, setHasMore] = useState(true);
+
+  const fetchInitial = async () => {
+    setLoading(true);
+    try {
+      const data = await getMangas(ITEMS_PER_PAGE, 0);
+      setMangas(data);
+      setHasMore(data.length === ITEMS_PER_PAGE);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    setLoading(true);
-    getMangas(40)
-      .then(setMangas)
-      .catch(console.error)
-      .finally(() => setLoading(false));
+    fetchInitial();
   }, []);
+
+  const loadMore = async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const data = await getMangas(ITEMS_PER_PAGE, mangas.length);
+      setMangas(prev => [...prev, ...data]);
+      setHasMore(data.length === ITEMS_PER_PAGE);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const filtered = mangas.filter((m) => {
     const matchGenre = activeGenre === "Todos" || m.genres?.includes(activeGenre);
@@ -96,11 +122,26 @@ function HomeContent() {
           </div>
         </div>
       ) : (
-        <div className="manga-grid animate-fade-in">
-          {filtered.map((manga) => (
-            <MangaCard key={manga.id} manga={manga} />
-          ))}
-        </div>
+        <>
+          <div className="manga-grid animate-fade-in">
+            {filtered.map((manga) => (
+              <MangaCard key={manga.id} manga={manga} />
+            ))}
+          </div>
+          
+          {hasMore && !query && activeGenre === "Todos" && (
+            <div style={{ display: "flex", justifyContent: "center", marginTop: 32 }}>
+              <button 
+                className="btn btn-secondary" 
+                onClick={loadMore} 
+                disabled={loadingMore}
+                style={{ padding: "12px 32px" }}
+              >
+                {loadingMore ? "Cargando..." : "Cargar más"}
+              </button>
+            </div>
+          )}
+        </>
       )}
     </>
   );

@@ -3,8 +3,9 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { getManga, getChapters, Manga, Chapter } from "@/lib/firestore";
+import { getManga, getChapters, Manga, Chapter, updateUserProfile } from "@/lib/firestore";
 import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/contexts/ToastContext";
 
 function formatDate(ts: any) {
   if (!ts) return "";
@@ -15,10 +16,19 @@ function formatDate(ts: any) {
 export default function MangaDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { profile } = useAuth();
+  const { profile, refreshProfile } = useAuth();
+  const { showToast } = useToast();
   const [manga, setManga] = useState<Manga | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const chaptersPerPage = 20;
+
+  // Bookmark states
+  const [isBookmarked, setIsBookmarked] = useState(false);
+  const [savingBookmark, setSavingBookmark] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -30,6 +40,12 @@ export default function MangaDetailPage() {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [id]);
+
+  useEffect(() => {
+    if (profile?.bookmarks && id) {
+      setIsBookmarked(profile.bookmarks.includes(id));
+    }
+  }, [profile, id]);
 
   if (loading) {
     return (
@@ -52,16 +68,54 @@ export default function MangaDetailPage() {
 
   const STATUS_LABELS: Record<string, string> = { ongoing: "En curso", completed: "Completado", hiatus: "Pausa" };
 
+  const toggleBookmark = async () => {
+    if (!profile?.uid || !id) {
+      router.push("/auth/login");
+      return;
+    }
+    setSavingBookmark(true);
+    try {
+      let newBookmarks = profile.bookmarks || [];
+      if (isBookmarked) {
+        newBookmarks = newBookmarks.filter((b) => b !== id);
+      } else {
+        newBookmarks = [...newBookmarks, id];
+      }
+      await updateUserProfile(profile.uid, { bookmarks: newBookmarks });
+      await refreshProfile();
+      showToast(isBookmarked ? "Eliminado de la biblioteca" : "Añadido a la biblioteca", "success");
+    } catch (err) {
+      showToast("Error al actualizar biblioteca", "error");
+    } finally {
+      setSavingBookmark(false);
+    }
+  };
+
+  const reversedChapters = [...chapters].reverse();
+  const totalPages = Math.ceil(reversedChapters.length / chaptersPerPage);
+  const paginatedChapters = reversedChapters.slice(
+    (currentPage - 1) * chaptersPerPage,
+    currentPage * chaptersPerPage
+  );
+
   return (
     <div className="animate-fade-in">
       {/* Back */}
-      <div style={{ padding: "16px 16px 0" }}>
+      <div style={{ padding: "16px 16px 0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <button
           className="btn btn-ghost btn-sm"
           onClick={() => router.back()}
           id="manga-detail-back-btn"
         >
           ← Volver
+        </button>
+        
+        <button 
+          className={`btn btn-sm ${isBookmarked ? "btn-secondary" : "btn-primary"}`}
+          onClick={toggleBookmark}
+          disabled={savingBookmark}
+        >
+          {savingBookmark ? "..." : isBookmarked ? "❤️ En biblioteca" : "🤍 Añadir"}
         </button>
       </div>
 
@@ -143,7 +197,7 @@ export default function MangaDetailPage() {
           <div className="empty-state">
             <div className="empty-state-icon">📭</div>
             <div className="empty-state-title">Sin capítulos publicados</div>
-            {profile?.emailVerified && (
+            {profile && (
               <Link href="/upload" className="btn btn-primary" style={{ marginTop: 8 }}>
                 Subir capítulo
               </Link>
@@ -151,34 +205,61 @@ export default function MangaDetailPage() {
           </div>
         ) : (
           <div>
-            {[...chapters].reverse().map((ch) => (
-              <Link
-                key={ch.id}
-                href={`/manga/${id}/read/${ch.id}`}
-                className="chapter-item"
-                id={`chapter-item-${ch.id}`}
-                aria-label={`Capítulo ${ch.number}: ${ch.title}`}
-              >
-                {ch.pages && ch.pages.length > 0 && (
-                  <img
-                    src={`/api/proxy?url=${encodeURIComponent(ch.pages[0])}`}
-                    alt={`Miniatura Cap. ${ch.number}`}
-                    className="chapter-thumb"
-                    loading="lazy"
-                  />
-                )}
-                <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden", gap: 4 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span className="chapter-number">Cap. {ch.number}</span>
-                    <span className="chapter-date" style={{ marginLeft: "auto" }}>{formatDate(ch.createdAt)}</span>
+            {paginatedChapters.map((ch) => {
+              const isRead = profile?.readHistory?.[id] && ch.id && profile.readHistory[id].includes(ch.id);
+              
+              return (
+                <Link
+                  key={ch.id}
+                  href={`/manga/${id}/read/${ch.id}`}
+                  className="chapter-item"
+                  id={`chapter-item-${ch.id}`}
+                  aria-label={`Capítulo ${ch.number}: ${ch.title}`}
+                  style={{ opacity: isRead ? 0.6 : 1 }}
+                >
+                  {ch.pages && ch.pages.length > 0 && (
+                    <img
+                      src={`/api/proxy?url=${encodeURIComponent(ch.pages[0])}`}
+                      alt={`Miniatura Cap. ${ch.number}`}
+                      className="chapter-thumb"
+                      loading="lazy"
+                    />
+                  )}
+                  <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden", gap: 4 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span className="chapter-number">Cap. {ch.number}</span>
+                      {isRead && <span style={{ color: "var(--accent-primary)", fontSize: 12, fontWeight: "bold" }}>✓ Visto</span>}
+                      <span className="chapter-date" style={{ marginLeft: "auto" }}>{formatDate(ch.createdAt)}</span>
+                    </div>
+                    <span className="chapter-title" style={{ whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden", fontSize: 13, color: "var(--text-secondary)" }}>
+                      {ch.title || `Capítulo ${ch.number}`}
+                    </span>
                   </div>
-                  <span className="chapter-title" style={{ whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden", fontSize: 13, color: "var(--text-secondary)" }}>
-                    {ch.title || `Capítulo ${ch.number}`}
-                  </span>
-                </div>
-                <span style={{ color: "var(--text-muted)", flexShrink: 0, paddingLeft: 8 }}>›</span>
-              </Link>
-            ))}
+                  <span style={{ color: "var(--text-muted)", flexShrink: 0, paddingLeft: 8 }}>›</span>
+                </Link>
+              );
+            })}
+            
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 16, marginTop: 24 }}>
+                <button 
+                  className="btn btn-secondary btn-sm" 
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(p => p - 1)}
+                >
+                  Anterior
+                </button>
+                <span style={{ fontSize: 14, color: "var(--text-muted)" }}>Página {currentPage} de {totalPages}</span>
+                <button 
+                  className="btn btn-secondary btn-sm" 
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage(p => p + 1)}
+                >
+                  Siguiente
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

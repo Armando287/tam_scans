@@ -57,12 +57,21 @@ export interface UserProfile {
   isVerified: boolean;
   isBanned: boolean;
   uploadCount: number;
+  avatarUrl?: string;
+  bookmarks?: string[]; // array of manga ids
+  readHistory?: Record<string, string[]>; // { mangaId: [chapterId1, chapterId2] }
   createdAt?: any;
 }
 
 // Mangas
-export async function getMangas(limitN = 20): Promise<Manga[]> {
-  const data = await supaFetch(`mangas?order=updatedAt.desc&limit=${limitN}`);
+export async function getMangas(limitN = 20, offset = 0): Promise<Manga[]> {
+  const data = await supaFetch(`mangas?order=updatedAt.desc&limit=${limitN}&offset=${offset}`);
+  return data;
+}
+
+export async function getMangasByIds(ids: string[]): Promise<Manga[]> {
+  if (!ids.length) return [];
+  const data = await supaFetch(`mangas?id=in.(${ids.join(",")})`);
   return data;
 }
 
@@ -137,4 +146,11 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
 export async function getAllUsers(): Promise<UserProfile[]> {
   const data = await supaFetch(`users`);
   return data;
+}
+
+export async function updateUserProfile(uid: string, data: Partial<UserProfile>): Promise<void> {
+  await supaFetch(`users?id=eq.${uid}`, {
+    method: "PATCH",
+    body: JSON.stringify(data)
+  });
 }
