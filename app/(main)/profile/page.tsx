@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { updateUserProfile } from "@/lib/firestore";
+import { getProxyUrl } from "@/lib/image-utils";
 import Link from "next/link";
 
 export default function ProfilePage() {
@@ -84,7 +85,7 @@ export default function ProfilePage() {
      router.push("/");
   };
 
-  const avatarSrc = profile?.avatarUrl ? `/api/proxy?url=${encodeURIComponent(profile.avatarUrl)}` : null;
+  const avatarSrc = profile?.avatarUrl ? getProxyUrl(profile.avatarUrl) : null;
 
   return (
     <div className="app-layout-page pb-24">

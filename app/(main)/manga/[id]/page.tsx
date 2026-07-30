@@ -2,6 +2,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { getProxyUrl } from "@/lib/image-utils";
 import Image from "next/image";
 import { useAuth } from "@/contexts/AuthContext";
 import { getManga, getChapters, Manga, Chapter } from "@/lib/firestore";
@@ -117,7 +118,7 @@ export default function MangaPage() {
     );
   }
 
-  const coverUrl = manga.coverUrl ? `/api/proxy?url=${encodeURIComponent(manga.coverUrl)}` : null;
+  const coverUrl = manga.coverUrl ? getProxyUrl(manga.coverUrl) : null;
 
   return (
     <div className="manga-detail-container pb-24">
@@ -225,7 +226,7 @@ export default function MangaPage() {
                   {ch.pages && ch.pages.length > 0 && (
                     <div className="chapter-row-thumb-wrap">
                       <img 
-                        src={`/api/proxy?url=${encodeURIComponent(ch.pages[0])}`} 
+                        src={getProxyUrl(ch.pages[0])} 
                         alt={`Cap ${ch.number}`} 
                         className="chapter-row-thumb" 
                       />

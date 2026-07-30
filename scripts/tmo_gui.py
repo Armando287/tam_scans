@@ -9,6 +9,15 @@ from dotenv import load_dotenv
 import threading
 import concurrent.futures
 import time
+import subprocess
+import sys
+
+try:
+    from DrissionPage import ChromiumPage, ChromiumOptions
+except ImportError:
+    print("Instalando DrissionPage...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "DrissionPage"])
+    from DrissionPage import ChromiumPage, ChromiumOptions
 
 # Load environment variables to get Supabase credentials
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env.local'))
@@ -77,7 +86,7 @@ class TMOScraperApp(ctk.CTk):
         self.main_frame.grid_rowconfigure(3, weight=1)
         
         # Scraper Section
-        self.url_label = ctk.CTkLabel(self.main_frame, text="Importar desde ZonaTMO", font=ctk.CTkFont(size=18, weight="bold"))
+        self.url_label = ctk.CTkLabel(self.main_frame, text="Importar Manga (TMO, YupManga, etc.)", font=ctk.CTkFont(size=18, weight="bold"))
         self.url_label.grid(row=0, column=0, padx=20, pady=(20, 5), sticky="w")
         
         self.manga_select_label = ctk.CTkLabel(self.main_frame, text="1. Selecciona el Manga de tu BD (o deja 'Crear Manga Nuevo'):")
@@ -86,10 +95,10 @@ class TMOScraperApp(ctk.CTk):
         self.manga_select = ctk.CTkComboBox(self.main_frame, values=["[ Crear Manga Nuevo ]"], width=400)
         self.manga_select.grid(row=2, column=0, padx=20, pady=5, sticky="w")
         
-        self.url_entry_label = ctk.CTkLabel(self.main_frame, text="2. Pega la URL de ZonaTMO:")
+        self.url_entry_label = ctk.CTkLabel(self.main_frame, text="2. Pega la URL del Manga:")
         self.url_entry_label.grid(row=3, column=0, padx=20, pady=5, sticky="w")
         
-        self.url_entry = ctk.CTkEntry(self.main_frame, placeholder_text="Ej: https://zonatmo.org/library/manga/...", width=600)
+        self.url_entry = ctk.CTkEntry(self.main_frame, placeholder_text="Ej: https://mangasnosekai.com/manga/...", width=600)
         self.url_entry.grid(row=4, column=0, padx=20, pady=5, sticky="w")
         
         self.analyze_btn = ctk.CTkButton(self.main_frame, text="Analizar Manga", command=self.analyze_manga)
@@ -193,8 +202,8 @@ class TMOScraperApp(ctk.CTk):
 
     def analyze_manga(self):
         url = self.url_entry.get().strip()
-        if not url or "zonatmo" not in url:
-            messagebox.showerror("Error", "Ingresa una URL válida de ZonaTMO")
+        if not url:
+            messagebox.showerror("Error", "Ingresa una URL válida")
             return
             
         self.analyze_btn.configure(state="disabled", text="Analizando...")
@@ -204,45 +213,108 @@ class TMOScraperApp(ctk.CTk):
         self.log(f"[*] Obteniendo info de: {url}")
         
         def _do_scrape():
+            page = None
             try:
-                scraper = cloudscraper.create_scraper()
-                res = scraper.get(url)
-                res.raise_for_status()
+                import cloudscraper
+                from bs4 import BeautifulSoup
                 
-                soup = BeautifulSoup(res.text, 'html.parser')
+                scraper = cloudscraper.create_scraper()
+                res = scraper.get(url, timeout=15)
+                
+                # Check if it failed or needs JS rendering
+                use_dp = False
+                if not res.ok:
+                    self.log(f"⚠️ Fallo inicial ({res.status_code}). Intentando con modo avanzado...")
+                    use_dp = True
+                else:
+                    soup = BeautifulSoup(res.text, 'html.parser')
+                    test_chaps = soup.select("ul.upload-list li, .list-group-item, .wp-manga-chapter, .chapter-list li, .chapters-list li, .eph-num, .chapter-item, a[href*='/chapters/']")
+                    if ("__NEXT_DATA__" in res.text or 'id="__next"' in res.text or "react" in res.text.lower()):
+                        self.log(f"⚠️ Página dinámica detectada. Usando modo avanzado...")
+                        use_dp = True
+                    elif not test_chaps:
+                        self.log(f"⚠️ No se encontraron capítulos. Intentando con modo avanzado...")
+                        use_dp = True
+
+                html = ""
+                if use_dp:
+                    co = ChromiumOptions()
+                    co.set_argument('--headless')
+                    co.set_argument('--no-sandbox')
+                    co.set_argument('--disable-gpu')
+                    page = ChromiumPage(co)
+                    page.get(url)
+                    time.sleep(3)
+                    page.scroll.to_bottom()
+                    time.sleep(1)
+                    
+                    
+                    html = page.html
+                else:
+                    html = res.text
+                    
+                soup = BeautifulSoup(html, 'html.parser')
                 
                 # Title
-                title_el = soup.select_one("h1.element-title")
+                title_el = soup.select_one("h1.element-title, .post-title h1, .infox h1, h1[itemprop='name'], .series-title, h1, .entry-title")
                 title = title_el.text.strip() if title_el else "Título Desconocido"
                 
                 # Description
-                desc_el = soup.select_one("#manga-synopsis, .element-description")
+                desc_el = soup.select_one("#manga-synopsis, .element-description, .summary__content, .entry-content, .desc, .description")
                 description = desc_el.text.strip() if desc_el else ""
                 
                 # Author
                 authors = []
-                for a in soup.select("a[href*='filter_by=author']"):
+                for a in soup.select("a[href*='author'], a[href*='filter_by=author'], .author-content a, .imptdt:contains('Author') a"):
                     authors.append(a.text.strip())
-                author = ", ".join(authors)
+                author = ", ".join(authors) if authors else "Desconocido"
                 
                 # Cover
-                cover_el = soup.select_one("img.book-thumbnail, .book-thumbnail img")
-                cover_url = cover_el.get("src", "") if cover_el else ""
+                cover_el = soup.select_one("img.book-thumbnail, .book-thumbnail img, .summary_image img, .thumb img, .series-cover img, .summary-image img, img.wp-post-image, .img-fluid")
+                cover_url = cover_el.get("src") or cover_el.get("data-src") if cover_el else ""
                 
                 # Genres
-                genres = [g.text.strip() for g in soup.select("a.badge-primary[href*='genders']")]
+                genres = [g.text.strip() for g in soup.select("a.badge-primary[href*='genders'], .genres-content a, .mgen a, .tags a, .genres a, a[href*='genre']")]
                 
                 # Chapters
                 chapters_found = []
                 
-                for li in soup.select("ul.upload-list li, .chapters-list li, .chapter-list li"):
-                    a_tag = li.select_one("a")
-                    if a_tag:
-                        c_title = a_tag.text.strip()
-                        c_url = a_tag.get("href")
-                        if c_title and c_url:
-                            chapters_found.append({"title": c_title, "url": c_url})
+                def _extract_chaps(html_source):
+                    s = BeautifulSoup(html_source, 'html.parser')
+                    for el in s.select("ul.upload-list li, .list-group-item, .chapters-list li, .chapter-list li, .wp-manga-chapter, #chapterlist li, .eph-num, .chap-list li, .chapter-item, a[href*='/chapters/'], a[href*='capitulo'], a[href*='/chapter/']"):
+                        a_tag = el if el.name == "a" else el.select_one("a")
+                        if a_tag:
+                            c_title = a_tag.text.strip()
+                            c_url = a_tag.get("href")
                             
+                            if not c_title:
+                                c_title = ' '.join([t.strip() for t in a_tag.strings if t.strip()])
+                            if not c_title and c_url:
+                                m = re.search(r'(\d+(\.\d+)?)', c_url.split('/')[-1])
+                                c_title = f"Capítulo {m.group(1)}" if m else "Capítulo Desconocido"
+                                
+                            if c_title and c_url:
+                                if c_url.startswith("/"):
+                                    from urllib.parse import urljoin
+                                    c_url = urljoin(url, c_url)
+                                if c_url.startswith("http") and not any(c['url'] == c_url for c in chapters_found):
+                                    if not any(x in c_title.lower() for x in ["siguiente", "anterior", "next", "prev"]):
+                                        chapters_found.append({"title": c_title, "url": c_url})
+
+                # Initial extraction
+                _extract_chaps(html)
+                
+                # If we used DrissionPage, also click tabs and extract iteratively
+                if use_dp:
+                    try:
+                        tabs = page.eles('xpath://*[contains(text(), "-")]')
+                        for t in tabs:
+                            if re.match(r'\d+-\d+', t.text):
+                                t.click(by_js=True)
+                                time.sleep(1) # Wait for React render
+                                _extract_chaps(page.html)
+                    except: pass
+                                    
                 if not chapters_found:
                     for a_tag in soup.select("a[href*='view_uploads']"):
                         c_url = a_tag.get("href")
@@ -254,26 +326,21 @@ class TMOScraperApp(ctk.CTk):
                                 trunc_el = container.select_one('h4, .text-truncate')
                                 c_title = trunc_el.text.strip() if trunc_el else None
                             c_title = c_title.split('\n')[0].strip() if c_title else "Capítulo"
-                            
                             if c_url and not any(c['url'] == c_url for c in chapters_found):
                                 chapters_found.append({"title": c_title, "url": c_url})
-                                
-                chapters_found.reverse() # Order Ascending
+                
+                chapters_found.reverse()
                 
                 self.manga_data = {
                     "title": title,
                     "description": description,
                     "author": author,
                     "coverUrl": cover_url,
-                    "genres": genres,
+                    "genres": list(set(genres)),
                     "chapters": chapters_found
                 }
                 
-                info_str = f"📚 Título: {title}\n"
-                info_str += f"✍️ Autor: {author}\n"
-                info_str += f"🏷️ Géneros: {', '.join(genres)}\n"
-                info_str += f"📖 Capítulos encontrados: {len(chapters_found)}\n\n"
-                info_str += f"📄 Sinopsis:\n{description[:300]}..."
+                info_str = f"📚 Título: {title}\n✍️ Autor: {author}\n🏷️ Géneros: {', '.join(self.manga_data['genres'])}\n📖 Capítulos encontrados: {len(chapters_found)}\n"
                 
                 self.info_text.configure(state="normal")
                 self.info_text.delete("1.0", "end")
@@ -288,6 +355,8 @@ class TMOScraperApp(ctk.CTk):
                 self.log(f"❌ Error al raspar: {e}")
                 messagebox.showerror("Error", f"Fallo al raspar: {e}")
             finally:
+                if page:
+                    page.quit()
                 self.analyze_btn.configure(state="normal", text="Analizar Manga")
                 
         threading.Thread(target=_do_scrape, daemon=True).start()
@@ -306,6 +375,7 @@ class TMOScraperApp(ctk.CTk):
         self.log(f"\n🚀 INICIANDO SUBIDA A LA BASE DE DATOS...")
         
         def _do_upload():
+            page = None
             try:
                 headers = {
                     "Authorization": f"Bearer {self.session_token}",
@@ -318,36 +388,16 @@ class TMOScraperApp(ctk.CTk):
                 existing_chapters = []
                 
                 if selected_title != "[ Crear Manga Nuevo ]":
-                    # Find manga ID
                     manga_obj = next((m for m in self.mangas_list if m["title"] == selected_title), None)
                     if manga_obj:
                         manga_id = manga_obj["id"]
-                        self.log(f"[1] Manga seleccionado de la BD: {selected_title} (ID: {manga_id})")
+                        self.log(f"[1] Manga seleccionado de la BD: {selected_title}")
                         
-                        # Fetch existing chapters for this manga
-                        self.log(f"-> Verificando qué capítulos ya están subidos...")
                         chap_res = requests.get(f"{self.base_url}/api/admin?action=manga-chapters&mangaId={manga_id}", headers=headers)
                         if chap_res.ok:
                             existing_chapters = chap_res.json().get("existingChapters", [])
-                            self.log(f"-> {len(existing_chapters)} capítulos encontrados en la BD para omitir.")
-                        else:
-                            self.log("⚠️ Fallo al obtener capítulos existentes. Puede que se intenten subir duplicados.")
-                            
-                        # Opcional: Actualizar datos del manga
-                        update_payload = {
-                            "action": "update-manga",
-                            "id": manga_id,
-                            "data": {
-                                "description": self.manga_data["description"],
-                                "author": self.manga_data["author"],
-                                "coverUrl": self.manga_data["coverUrl"],
-                                "genres": self.manga_data["genres"]
-                            }
-                        }
-                        requests.post(f"{self.base_url}/api/admin", headers=headers, json=update_payload)
                 else:
-                    # Crear nuevo manga
-                    self.log("[1] Creando Nuevo Manga en la Base de Datos...")
+                    self.log("[1] Creando Nuevo Manga...")
                     manga_payload = {
                         "action": "create-manga",
                         "data": {
@@ -360,147 +410,168 @@ class TMOScraperApp(ctk.CTk):
                         }
                     }
                     res = requests.post(f"{self.base_url}/api/admin", headers=headers, json=manga_payload)
-                    if not res.ok:
-                        raise Exception(f"Fallo al crear manga: {res.text}")
                     manga_id = res.json().get("id")
-                    self.log(f"✅ Manga creado con ID: {manga_id}")
                 
                 # 2. Descargar y Subir capítulos
                 chapters = self.manga_data["chapters"]
+                import cloudscraper
                 scraper = cloudscraper.create_scraper()
-                total_chapters = len(chapters)
                 
+                total_chapters = len(chapters)
                 for i, chap in enumerate(chapters):
-                    self.progress_bar.set((i) / total_chapters)
-                    
-                    # Extract chapter number
-                    import re
-                    match = re.search(r"(\d+(\.\d+)?)", chap['title'])
-                    chapter_number = match.group(1) if match else str(i+1)
-                    
-                    # Verificamos si ya existe el capítulo
-                    if float(chapter_number) in existing_chapters:
-                        self.log(f"⏩ Omitiendo {chap['title']}, ya está subido.")
-                        continue
+                    try:
+                        self.progress_bar.set((i) / total_chapters)
+                        import re
+                        match = re.search(r"(\d+(\.\d+)?)", chap['title'])
+                        chapter_number = match.group(1) if match else str(i+1)
                         
-                    self.log(f"[*] Analizando {chap['title']} ({i+1}/{total_chapters})")
-                    
-                    # Fetch images
-                    chap_res = scraper.get(chap['url'])
-                    chap_soup = BeautifulSoup(chap_res.text, 'html.parser')
-                    
-                    images = []
-                    for img in chap_soup.find_all('img'):
-                        src = img.get('src') or img.get('data-src')
-                        if src and 'avatar' not in src and 'storage' in src:
-                            images.append(src)
+                        if float(chapter_number) in existing_chapters:
+                            continue
                             
-                    if not images:
-                        self.log(f"⚠️ No se encontraron imágenes en {chap['title']}")
-                        continue
+                        self.log(f"[*] Analizando {chap['title']}")
                         
-                    self.log(f"   -> Encontradas {len(images)} imágenes. Subiéndolas a Storage...")
-                    
-                    # Upload images concurrently
-                    uploaded_pages = [None] * len(images)
-                    
-                    def _upload_image(idx, url):
-                        retries = 3
-                        ext = "jpg"
-                        if ".png" in url.lower(): ext = "png"
-                        elif ".webp" in url.lower(): ext = "webp"
-                        temp_file = f"temp_chapter_{chapter_number}_page_{idx}.{ext}"
-
-                        for attempt in range(retries):
-                            try:
-                                # 1. Download locally
-                                img_res = scraper.get(url, stream=True, timeout=30)
-                                if not img_res.ok:
-                                    self.log(f"   ⚠️ Fallo descarga img {idx+1} (Intento {attempt+1})")
-                                    time.sleep(2)
-                                    continue
-                                    
-                                with open(temp_file, 'wb') as f:
-                                    for chunk in img_res.iter_content(chunk_size=8192):
-                                        f.write(chunk)
-                                        
-                                # 2. Upload to server
-                                auth_header = {"Authorization": headers["Authorization"]}
-                                with open(temp_file, 'rb') as f:
-                                    mime_type = f"image/{ext}" if ext != "jpg" else "image/jpeg"
-                                    files = {'file': (f"page_{idx}.{ext}", f, mime_type)}
-                                    data = {
-                                        "mangaId": manga_id,
-                                        "chapterNumber": chapter_number,
-                                        "pageIndex": str(idx),
-                                        "fileType": "images"
-                                    }
-                                    
-                                    up_res = requests.post(
-                                        f"{self.base_url}/api/upload",
-                                        headers=auth_header,
-                                        files=files,
-                                        data=data,
-                                        timeout=60
-                                    )
-                                    
-                                # 3. Cleanup
-                                try:
-                                    os.remove(temp_file)
-                                except: pass
-                                
-                                if up_res.ok:
-                                    uploaded_pages[idx] = up_res.json().get("url")
-                                    return True
-                                else:
-                                    self.log(f"   ⚠️ Reintentando img {idx+1} (Intento {attempt+1}): {up_res.text}")
-                                    time.sleep(2)
-                            except Exception as e:
-                                self.log(f"   ⚠️ Reintentando img {idx+1} tras error: {e}")
-                                time.sleep(2)
-                                try:
-                                    if os.path.exists(temp_file):
-                                        os.remove(temp_file)
-                                except: pass
-                        
-                        self.log(f"   ❌ Fallo definitivo subiendo imagen {idx+1}")
-                        return False
-
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-                        futures = [executor.submit(_upload_image, j, img_url) for j, img_url in enumerate(images)]
-                        concurrent.futures.wait(futures)
-                    
-                    # Remove any Nones if there were complete failures
-                    uploaded_pages = [p for p in uploaded_pages if p is not None]
-                    
-                    if uploaded_pages:
-                        self.log(f"   -> Guardando {chap['title']} en la Base de Datos...")
-                        create_res = requests.post(
-                            f"{self.base_url}/api/admin",
-                            headers=headers,
-                            json={
-                                "action": "create-chapter",
-                                "data": {
-                                    "manga_id": manga_id,
-                                    "title": chap['title'],
-                                    "number": float(chapter_number),
-                                    "pages": uploaded_pages
-                                }
-                            }
-                        )
-                        if create_res.ok:
-                            self.log(f"✅ {chap['title']} importado.")
+                        use_dp = False
+                        try:
+                            chapter_res = scraper.get(chap['url'], timeout=15)
+                            if not chapter_res.ok:
+                                use_dp = True
+                            else:
+                                chap_soup = BeautifulSoup(chapter_res.text, 'html.parser')
+                                img_tags = chap_soup.select("#viewer-container img, .viewer-page img, .reading-content img, #readerarea img, .page-break img, .img-responsive, .vung-doc img, img.reader-image")
+                                if not img_tags:
+                                    use_dp = True
+                        except:
+                            use_dp = True
+                            
+                        images = []
+                        if use_dp:
+                            self.log(f"   -> Usando modo avanzado para extraer imágenes...")
+                            co = ChromiumOptions()
+                            co.set_argument('--headless')
+                            co.set_argument('--no-sandbox')
+                            co.set_argument('--disable-gpu')
+                            page = ChromiumPage(co)
+                            page.get(chap['url'])
+                            time.sleep(2)
+                            page.scroll.to_bottom()
+                            time.sleep(1)
+                            img_tags = page.eles("css:#viewer-container img, .viewer-page img, .reading-content img, #readerarea img, .page-break img, .vung-doc img, img.reader-image")
+                            images = [img.attr("src") or img.attr("data-src") or img.attr("data-lazy-src") for img in img_tags if img.attr("src") or img.attr("data-src") or img.attr("data-lazy-src")]
+                            page.quit()
                         else:
-                            self.log(f"❌ Fallo guardando capítulo: {create_res.text}")
+                            images = [img.get("data-src") or img.get("data-lazy-src") or img.get("src") for img in img_tags if img.get("src") or img.get("data-src") or img.get("data-lazy-src")]
+                        
+                        # Filter out logos and fix blocked ports (TMO sometimes uses :8091 which is blocked by ISPs)
+                        import re
+                        images = [re.sub(r':\d+/', '/', src) if src else None for src in images]
+                        images = [src for src in images if src and src.startswith("http") and "logo" not in src.lower()]
+                        
+                        if not images:
+                            self.log(f"⚠️ No se encontraron imágenes en {chap['title']}")
+                            continue
+                            
+                        self.log(f"   -> Encontradas {len(images)} imágenes.")
+                        
+                        uploaded_pages = [None] * len(images)
+                        
+                        def _upload_image(idx, img_url):
+                            retries = 3
+                            last_error = ""
+                            import urllib.parse
+                            parsed = urllib.parse.urlparse(img_url)
+                            import os
+                            ext = os.path.splitext(parsed.path)[1].lower().replace(".", "")
+                            if not ext or ext not in ["jpg", "jpeg", "png", "webp", "avif", "gif"]:
+                                ext = "jpg"
+                            temp_file = f"temp_chapter_{chapter_number}_page_{idx}.{ext}"
+
+                            for attempt in range(retries):
+                                try:
+                                    img_res = scraper.get(img_url, timeout=30)
+                                    if not img_res.ok:
+                                        time.sleep(2)
+                                        continue
+                                        
+                                    with open(temp_file, 'wb') as f:
+                                        f.write(img_res.content)
+                                            
+                                    auth_header = {"Authorization": headers["Authorization"]}
+                                    with open(temp_file, 'rb') as f:
+                                        mime_type = f"image/{ext}" if ext != "jpg" else "image/jpeg"
+                                        if ext == "avif": mime_type = "image/avif"
+                                        files = {'file': (f"page_{idx}.{ext}", f, mime_type)}
+                                        data = {
+                                            "mangaId": manga_id,
+                                            "chapterNumber": chapter_number,
+                                            "pageIndex": str(idx),
+                                            "fileType": "images"
+                                        }
+                                        
+                                        up_res = requests.post(
+                                            f"{self.base_url}/api/upload",
+                                            headers=auth_header,
+                                            files=files,
+                                            data=data,
+                                            timeout=60
+                                        )
+                                        
+                                    try: os.remove(temp_file)
+                                    except: pass
+                                    
+                                    if up_res.ok:
+                                        uploaded_pages[idx] = up_res.json().get("url")
+                                        return True
+                                    else:
+                                        last_error = f"Server error {up_res.status_code}: {up_res.text}"
+                                except Exception as e:
+                                    last_error = str(e)
+                                    time.sleep(2)
+                                    try: os.remove(temp_file)
+                                    except: pass
+                            
+                            self.log(f"   ❌ Fallo definitivo en imagen {idx+1} tras {retries} intentos: {last_error}")
+                            return False
+
+                        import concurrent.futures
+                        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+                            futures = [executor.submit(_upload_image, j, img_url) for j, img_url in enumerate(images)]
+                            concurrent.futures.wait(futures)
+                        
+                        uploaded_pages = [p for p in uploaded_pages if p is not None]
+                        
+                        if len(uploaded_pages) != len(images):
+                            self.log(f"⚠️ {chap['title']} tiene imágenes corruptas o caídas. Saltando al siguiente episodio...")
+                            continue
+                        
+                        if uploaded_pages:
+                            requests.post(
+                                f"{self.base_url}/api/admin",
+                                headers=headers,
+                                json={
+                                    "action": "create-chapter",
+                                    "data": {
+                                        "manga_id": manga_id,
+                                        "title": chap['title'],
+                                        "number": float(chapter_number),
+                                        "pages": uploaded_pages
+                                    }
+                                }
+                            )
+                            self.log(f"✅ {chap['title']} importado.")
+                    except Exception as e:
+                        self.log(f"⚠️ Error inesperado en {chap['title']}, saltando al siguiente: {e}")
+                        continue
                             
                 self.progress_bar.set(1.0)
                 self.log("\n🎉 ¡PROCESO DE IMPORTACIÓN MASIVA FINALIZADO! 🎉")
                 messagebox.showinfo("Éxito", "Todos los capítulos han sido subidos a la base de datos.")
                 
             except Exception as e:
-                self.log(f"❌ Error en la subida: {e}")
-                messagebox.showerror("Error", f"Se detuvo la subida: {e}")
+                self.log(f"❌ ERROR FATAL: {e}")
+                messagebox.showerror("Error", str(e))
             finally:
+                if 'page' in locals() and page:
+                    page.quit()
                 self.upload_btn.configure(state="normal")
                 self.analyze_btn.configure(state="normal")
                 

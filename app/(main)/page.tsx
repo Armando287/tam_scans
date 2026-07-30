@@ -2,6 +2,7 @@
 import { useEffect, useState, Suspense, useRef } from "react";
 import Link from "next/link";
 import { getMangas, Manga } from "@/lib/firestore";
+import { getProxyUrl } from "@/lib/image-utils";
 import MangaCard from "@/components/MangaCard";
 
 const ITEMS_PER_PAGE = 20;
@@ -101,7 +102,7 @@ function HomeContent() {
                   <Link href={`/manga/${manga.id}`} key={manga.id} className="featured-card">
                     <div className="featured-image-wrap">
                        {manga.coverUrl ? (
-                         <img src={`/api/proxy?url=${encodeURIComponent(manga.coverUrl)}`} alt={manga.title} className="featured-image" />
+                         <img src={getProxyUrl(manga.coverUrl)} alt={manga.title} className="featured-image" />
                        ) : (
                          <div className="featured-placeholder">?</div>
                        )}

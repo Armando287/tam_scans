@@ -6,6 +6,7 @@ import Link from "next/link";
 import { getChapter, getChapters, Chapter } from "@/lib/firestore";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
+import { getProxyUrl } from "@/lib/image-utils";
 
 type ReadMode = "vertical" | "horizontal" | "webtoon" | "pdf";
 
@@ -93,7 +94,7 @@ function HorizontalReader({ pages, currentPage, onPageChange }: {
       {pages[currentPage] && (
         <div className="reader-horizontal-page">
           <ReaderImage
-            src={`/api/proxy?url=${encodeURIComponent(pages[currentPage])}`}
+            src={getProxyUrl(pages[currentPage])}
             alt={`Página ${currentPage + 1}`}
             priority
             style={{ maxWidth: "100%", maxHeight: "calc(100vh - 120px)", objectFit: "contain", width: "auto", height: "auto" }}
@@ -151,7 +152,7 @@ function VerticalReader({ pages, webtoon }: { pages: string[]; webtoon?: boolean
       {pages.map((url, i) => (
         <ReaderImage
           key={i}
-          src={`/api/proxy?url=${encodeURIComponent(url)}`}
+          src={getProxyUrl(url)}
           alt={`Página ${i + 1}`}
           priority={i < 3}
           style={{ width: "100%", maxWidth: webtoon ? "none" : 800, height: "auto" }}
