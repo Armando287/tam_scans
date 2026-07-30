@@ -159,9 +159,9 @@ export default function MangaDetailPage() {
                 id={`chapter-item-${ch.id}`}
                 aria-label={`Capítulo ${ch.number}: ${ch.title}`}
               >
-                {ch.images && ch.images.length > 0 && (
+                {ch.pages && ch.pages.length > 0 && (
                   <img
-                    src={`/api/proxy?url=${encodeURIComponent(ch.images[0])}`}
+                    src={`/api/proxy?url=${encodeURIComponent(ch.pages[0])}`}
                     alt={`Miniatura Cap. ${ch.number}`}
                     className="chapter-thumb"
                     loading="lazy"
