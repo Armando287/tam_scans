@@ -104,6 +104,7 @@ export default function AdminMangas() {
       const newChapters = chapters.filter(chap => {
           const num = chap.title.match(/(\d+(\.\d+)?)/)?.[0];
           if (!num) return true;
+          if (num.includes('.')) return false; // Skip chapters like 16.1
           return !existingNumbers.has(parseFloat(num));
       });
 

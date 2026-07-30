@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
+import { supabase } from "@/lib/supabase";
 
 export default function RegisterPage() {
   const { register, user } = useAuth();
@@ -32,12 +33,25 @@ export default function RegisterPage() {
     }
     setLoading(true);
     try {
+      // Check if username is already taken
+      const { data: existingUser } = await supabase
+        .from("users")
+        .select("id")
+        .ilike("displayName", displayName.trim())
+        .maybeSingle();
+
+      if (existingUser) {
+        showToast("Ese nombre de usuario ya está en uso", "error");
+        setLoading(false);
+        return;
+      }
+
       await register(email, password, displayName.trim());
-      router.push("/auth/verify");
+      router.push("/");
     } catch (err: any) {
-      const msg = err.code === "auth/email-already-in-use"
+      const msg = err.message?.includes("already") || err.code === "auth/email-already-in-use"
         ? "Este correo ya está registrado"
-        : err.code === "auth/weak-password"
+        : err.message?.includes("weak") || err.code === "auth/weak-password"
         ? "La contraseña es muy débil"
         : "Error al crear cuenta";
       showToast(msg, "error");
@@ -119,7 +133,7 @@ export default function RegisterPage() {
           </div>
 
           <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.5 }}>
-            Al registrarte aceptas nuestros términos. Recibirás un email de verificación antes de poder subir contenido.
+            Al registrarte aceptas nuestros términos.
           </div>
 
           <button

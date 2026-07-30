@@ -53,10 +53,6 @@ export default function UploadPage() {
     router.replace("/auth/login");
     return null;
   }
-  if (!profile?.emailVerified) {
-    router.replace("/auth/verify");
-    return null;
-  }
 
   function addFiles(newFiles: File[]) {
     const validTypes = ["image/png", "image/jpeg", "image/webp", "application/pdf"];
@@ -149,6 +145,7 @@ export default function UploadPage() {
       const newChapters = chapters.filter((chap: any) => {
           const num = chap.title.match(/(\d+(\.\d+)?)/)?.[0];
           if (!num) return true;
+          if (num.includes('.')) return false; // Skip chapters like 16.1
           return !existingNumbers.has(parseFloat(num));
       });
 

@@ -159,10 +159,24 @@ export default function MangaDetailPage() {
                 id={`chapter-item-${ch.id}`}
                 aria-label={`Capítulo ${ch.number}: ${ch.title}`}
               >
-                <span className="chapter-number">Cap. {ch.number}</span>
-                <span className="chapter-title">{ch.title || `Capítulo ${ch.number}`}</span>
-                <span className="chapter-date">{formatDate(ch.createdAt)}</span>
-                <span style={{ color: "var(--text-muted)" }}>›</span>
+                {ch.images && ch.images.length > 0 && (
+                  <img
+                    src={`/api/proxy?url=${encodeURIComponent(ch.images[0])}`}
+                    alt={`Miniatura Cap. ${ch.number}`}
+                    className="chapter-thumb"
+                    loading="lazy"
+                  />
+                )}
+                <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden", gap: 4 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span className="chapter-number">Cap. {ch.number}</span>
+                    <span className="chapter-date" style={{ marginLeft: "auto" }}>{formatDate(ch.createdAt)}</span>
+                  </div>
+                  <span className="chapter-title" style={{ whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden", fontSize: 13, color: "var(--text-secondary)" }}>
+                    {ch.title || `Capítulo ${ch.number}`}
+                  </span>
+                </div>
+                <span style={{ color: "var(--text-muted)", flexShrink: 0, paddingLeft: 8 }}>›</span>
               </Link>
             ))}
           </div>
