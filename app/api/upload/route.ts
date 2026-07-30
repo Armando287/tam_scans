@@ -40,9 +40,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
-    const validTypes = ["image/png", "image/jpeg", "image/webp", "application/pdf"];
-    if (!validTypes.includes(file.type)) {
-      return NextResponse.json({ error: "Invalid file type. Allowed: PNG, JPG, WebP, PDF" }, { status: 400 });
+    if (!file.type.startsWith("image/") && file.type !== "application/pdf" && file.type !== "application/epub+zip") {
+      return NextResponse.json({ error: "Invalid file type. Allowed: Images, PDF, EPUB" }, { status: 400 });
     }
 
     if (file.size > 50 * 1024 * 1024) {

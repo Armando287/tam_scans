@@ -427,7 +427,8 @@ class TMOScraperApp(ctk.CTk):
                                 # 2. Upload to server
                                 auth_header = {"Authorization": headers["Authorization"]}
                                 with open(temp_file, 'rb') as f:
-                                    files = {'file': (f"page_{idx}.{ext}", f, f"image/{ext}")}
+                                    mime_type = f"image/{ext}" if ext != "jpg" else "image/jpeg"
+                                    files = {'file': (f"page_{idx}.{ext}", f, mime_type)}
                                     data = {
                                         "mangaId": manga_id,
                                         "chapterNumber": chapter_number,

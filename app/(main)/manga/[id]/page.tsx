@@ -55,7 +55,7 @@ export default function MangaPage() {
       const { error } = await supabase
         .from("users")
         .update({ bookmarks: newBookmarks })
-        .eq("id", user.uid);
+        .eq("id", user.id);
         
       if (error) throw error;
       
