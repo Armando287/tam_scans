@@ -29,6 +29,10 @@ export async function GET(req: NextRequest) {
      }
   }
 
+  if (!fetchUrl) {
+    return new NextResponse("Missing URL parameters", { status: 400 });
+  }
+
   try {
      const res = await fetch(fetchUrl, {
          headers: {
