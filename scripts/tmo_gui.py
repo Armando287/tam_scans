@@ -165,7 +165,13 @@ class TMOScraperApp(ctk.CTk):
                     if mangas_res.ok:
                         self.mangas_list = mangas_res.json().get("mangas", [])
                         options = ["[ Crear Manga Nuevo ]"] + [m["title"] for m in self.mangas_list]
-                        self.manga_select.configure(values=options)
+                        
+                        def update_combo(opts=options):
+                            self.manga_select.configure(values=opts)
+                            self.manga_select.set(opts[0])
+                            
+                        self.after(0, update_combo)
+                        
                         self.log(f"✅ {len(self.mangas_list)} mangas cargados en el selector.")
                     else:
                         self.log("⚠️ No se pudo obtener la lista de mangas.")
@@ -400,19 +406,48 @@ class TMOScraperApp(ctk.CTk):
                     
                     def _upload_image(idx, url):
                         retries = 3
+                        ext = "jpg"
+                        if ".png" in url.lower(): ext = "png"
+                        elif ".webp" in url.lower(): ext = "webp"
+                        temp_file = f"temp_chapter_{chapter_number}_page_{idx}.{ext}"
+
                         for attempt in range(retries):
                             try:
-                                up_res = requests.post(
-                                    f"{self.base_url}/api/upload/external",
-                                    headers=headers,
-                                    json={
-                                        "url": url,
+                                # 1. Download locally
+                                img_res = scraper.get(url, stream=True, timeout=30)
+                                if not img_res.ok:
+                                    self.log(f"   ⚠️ Fallo descarga img {idx+1} (Intento {attempt+1})")
+                                    time.sleep(2)
+                                    continue
+                                    
+                                with open(temp_file, 'wb') as f:
+                                    for chunk in img_res.iter_content(chunk_size=8192):
+                                        f.write(chunk)
+                                        
+                                # 2. Upload to server
+                                auth_header = {"Authorization": headers["Authorization"]}
+                                with open(temp_file, 'rb') as f:
+                                    files = {'file': (f"page_{idx}.{ext}", f, f"image/{ext}")}
+                                    data = {
                                         "mangaId": manga_id,
                                         "chapterNumber": chapter_number,
-                                        "pageIndex": str(idx)
-                                    },
-                                    timeout=30 # Add timeout
-                                )
+                                        "pageIndex": str(idx),
+                                        "fileType": "images"
+                                    }
+                                    
+                                    up_res = requests.post(
+                                        f"{self.base_url}/api/upload",
+                                        headers=auth_header,
+                                        files=files,
+                                        data=data,
+                                        timeout=60
+                                    )
+                                    
+                                # 3. Cleanup
+                                try:
+                                    os.remove(temp_file)
+                                except: pass
+                                
                                 if up_res.ok:
                                     uploaded_pages[idx] = up_res.json().get("url")
                                     return True
@@ -422,6 +457,10 @@ class TMOScraperApp(ctk.CTk):
                             except Exception as e:
                                 self.log(f"   ⚠️ Reintentando img {idx+1} tras error: {e}")
                                 time.sleep(2)
+                                try:
+                                    if os.path.exists(temp_file):
+                                        os.remove(temp_file)
+                                except: pass
                         
                         self.log(f"   ❌ Fallo definitivo subiendo imagen {idx+1}")
                         return False

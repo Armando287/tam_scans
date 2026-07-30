@@ -226,8 +226,49 @@ h1, h2, h3, h4 { font-family: var(--font-heading); font-weight: 700; letter-spac
 }
 .featured-title { font-size: 22px; font-weight: 800; color: white; margin-bottom: 6px; line-height: 1.15; font-family: var(--font-heading); }
 .featured-meta { font-size: 13px; color: var(--text-secondary); font-weight: 500; }
-.desktop-only-arrows { display: none !important; }
 
+/* ============ SLIDER ARROWS ============ */
+.featured-carousel-wrapper {
+  position: relative;
+}
+.carousel-arrow {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 50px;
+  background: rgba(0,0,0,0.5);
+  border: none;
+  color: white;
+  font-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.3s, background 0.3s;
+}
+.featured-carousel-wrapper:hover .carousel-arrow {
+  opacity: 1;
+}
+.carousel-arrow:hover {
+  background: rgba(0,0,0,0.8);
+}
+.carousel-arrow.left {
+  left: -20px; /* pull slightly out if desired or 0 to stay inside */
+  border-top-right-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
+.carousel-arrow.right {
+  right: -20px;
+  border-top-left-radius: 8px;
+  border-bottom-left-radius: 8px;
+}
+
+@media (max-width: 768px) {
+  .desktop-only-arrows {
+    display: none !important;
+  }
+}
 /* ============ MANGA GRID & CARDS ============ */
 .manga-grid {
   display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; padding: 0 20px 20px;

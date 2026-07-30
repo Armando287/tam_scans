@@ -222,7 +222,7 @@ export default function UploadPage() {
                 onChange={(e) => {
                   const selectedTitle = e.target.value;
                   const selected = mangas.find(m => m.title === selectedTitle);
-                  setSelectedMangaId(selected ? selected.id : "");
+                  setSelectedMangaId(selected?.id || "");
                 }}
                 required
               />

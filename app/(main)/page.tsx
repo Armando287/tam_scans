@@ -89,18 +89,14 @@ function HomeContent() {
           {/* Featured Carousel */}
           {featuredMangas.length > 0 && (
             <div className="featured-section">
-              <div className="section-header" style={{ alignItems: "center" }}>
+              <div className="section-header">
                 <h2 className="section-title">Destacados</h2>
-                <div style={{ display: "flex", gap: 8 }} className="desktop-only-arrows">
-                  <button onClick={scrollLeft} style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)", color: "white", fontSize: 18, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    &larr;
-                  </button>
-                  <button onClick={scrollRight} style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)", color: "white", fontSize: 18, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    &rarr;
-                  </button>
-                </div>
               </div>
-              <div className="featured-carousel" ref={carouselRef}>
+              <div className="featured-carousel-wrapper">
+                <button className="carousel-arrow left desktop-only-arrows" onClick={scrollLeft}>
+                  &larr;
+                </button>
+                <div className="featured-carousel" ref={carouselRef}>
                 {featuredMangas.map((manga) => (
                   <Link href={`/manga/${manga.id}`} key={manga.id} className="featured-card">
                     <div className="featured-image-wrap">
@@ -116,6 +112,10 @@ function HomeContent() {
                     </div>
                   </Link>
                 ))}
+              </div>
+              <button className="carousel-arrow right desktop-only-arrows" onClick={scrollRight}>
+                &rarr;
+              </button>
               </div>
             </div>
           )}

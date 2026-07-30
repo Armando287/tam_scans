@@ -184,16 +184,21 @@ export default function ReaderPage() {
       const newHistory = { ...profile.readHistory };
       newHistory[id] = [...readChapters, chapterId];
       
-      supabase
-        .from("users")
-        .update({ readHistory: newHistory })
-        .eq("id", profile.uid)
-        .then(({ error }) => {
-           if (error) throw error;
-           hasMarkedRead.current = true;
-           refreshProfile();
-        })
-        .catch(console.error);
+      const updateHistory = async () => {
+        const { error } = await supabase
+          .from("users")
+          .update({ readHistory: newHistory })
+          .eq("id", profile.uid);
+          
+        if (error) {
+          console.error(error);
+        } else {
+          hasMarkedRead.current = true;
+          refreshProfile();
+        }
+      };
+      
+      updateHistory();
     } else {
       hasMarkedRead.current = true;
     }
