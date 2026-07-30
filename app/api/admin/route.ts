@@ -111,6 +111,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
+    if (action === "search-manga") {
+      const { data: manga } = await client.from("mangas").select("id").eq("title", data.title).maybeSingle();
+      if (manga) {
+         const { data: existingChapters } = await client.from("chapters").select("number").eq("mangaId", manga.id);
+         return NextResponse.json({ id: manga.id, existingChapters: existingChapters?.map(c => c.number) || [] });
+      }
+      return NextResponse.json({ id: null, existingChapters: [] });
+    }
+
     if (action === "create-manga") {
       const { data: newManga } = await client.from("mangas").insert({
         ...data,

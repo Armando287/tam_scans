@@ -282,26 +282,54 @@ class TMOScraperApp(ctk.CTk):
                     "Content-Type": "application/json"
                 }
                 
-                # 1. Crear el manga
-                self.log("[1] Creando/Verificando Manga en la Base de Datos...")
-                manga_payload = {
-                    "action": "create-manga",
-                    "data": {
-                        "title": self.manga_data["title"],
-                        "description": self.manga_data["description"],
-                        "author": self.manga_data["author"],
-                        "coverUrl": self.manga_data["coverUrl"],
-                        "genres": self.manga_data["genres"],
-                        "status": "ongoing"
-                    }
+                # 1. Search or Create Manga
+                self.log("[1] Verificando Manga en la Base de Datos...")
+                search_payload = {
+                    "action": "search-manga",
+                    "data": {"title": self.manga_data["title"]}
                 }
-                
-                res = requests.post(f"{self.base_url}/api/admin", headers=headers, json=manga_payload)
-                if not res.ok:
-                    raise Exception(f"Fallo al crear manga: {res.text}")
+                search_res = requests.post(f"{self.base_url}/api/admin", headers=headers, json=search_payload)
+                if not search_res.ok:
+                    raise Exception(f"Fallo al buscar manga: {search_res.text}")
                     
-                manga_id = res.json().get("id")
-                self.log(f"✅ Manga creado con ID: {manga_id}")
+                search_data = search_res.json()
+                manga_id = search_data.get("id")
+                existing_chapters = search_data.get("existingChapters", [])
+                
+                if manga_id:
+                    self.log(f"✅ Manga encontrado (ID: {manga_id}). Omitiremos capítulos existentes.")
+                    
+                    # Update Manga Data (optional, but good to keep it fresh)
+                    update_payload = {
+                        "action": "update-manga",
+                        "id": manga_id,
+                        "data": {
+                            "description": self.manga_data["description"],
+                            "author": self.manga_data["author"],
+                            "coverUrl": self.manga_data["coverUrl"],
+                            "genres": self.manga_data["genres"]
+                        }
+                    }
+                    requests.post(f"{self.base_url}/api/admin", headers=headers, json=update_payload)
+                    
+                else:
+                    self.log("✅ Manga nuevo, creándolo...")
+                    manga_payload = {
+                        "action": "create-manga",
+                        "data": {
+                            "title": self.manga_data["title"],
+                            "description": self.manga_data["description"],
+                            "author": self.manga_data["author"],
+                            "coverUrl": self.manga_data["coverUrl"],
+                            "genres": self.manga_data["genres"],
+                            "status": "ongoing"
+                        }
+                    }
+                    res = requests.post(f"{self.base_url}/api/admin", headers=headers, json=manga_payload)
+                    if not res.ok:
+                        raise Exception(f"Fallo al crear manga: {res.text}")
+                    manga_id = res.json().get("id")
+                    self.log(f"✅ Manga creado con ID: {manga_id}")
                 
                 # 2. Descargar y Subir capítulos
                 chapters = self.manga_data["chapters"]
@@ -309,8 +337,19 @@ class TMOScraperApp(ctk.CTk):
                 total_chapters = len(chapters)
                 
                 for i, chap in enumerate(chapters):
-                    self.log(f"[*] Analizando {chap['title']} ({i+1}/{total_chapters})")
                     self.progress_bar.set((i) / total_chapters)
+                    
+                    # Extract chapter number
+                    import re
+                    match = re.search(r"(\d+(\.\d+)?)", chap['title'])
+                    chapter_number = match.group(1) if match else str(i+1)
+                    
+                    # Verificamos si ya existe el capítulo
+                    if float(chapter_number) in existing_chapters:
+                        self.log(f"⏩ Omitiendo {chap['title']}, ya está subido.")
+                        continue
+                        
+                    self.log(f"[*] Analizando {chap['title']} ({i+1}/{total_chapters})")
                     
                     # Fetch images
                     chap_res = scraper.get(chap['url'])
@@ -331,10 +370,6 @@ class TMOScraperApp(ctk.CTk):
                     # Upload images
                     uploaded_pages = []
                     
-                    # Extract chapter number
-                    import re
-                    match = re.search(r"(\d+(\.\d+)?)", chap['title'])
-                    chapter_number = match.group(1) if match else str(i+1)
                     
                     for j, img_url in enumerate(images):
                         up_res = requests.post(
