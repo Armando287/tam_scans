@@ -277,14 +277,22 @@ export default function ReaderPage() {
         className={`reader-controls ${!controlsVisible && (mode === "vertical" || mode === "webtoon") ? "hidden" : ""}`}
         id="reader-top-controls"
       >
-        <Link
-          href={`/manga/${id}`}
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            // Try to go back in history to avoid loops, otherwise push
+            if (window.history.length > 2) {
+              router.back();
+            } else {
+              router.push(`/manga/${id}`);
+            }
+          }}
           className="reader-back-btn"
           id="reader-back-btn"
           aria-label="Volver al manga"
         >
           ←
-        </Link>
+        </button>
 
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 2 }}>Cap. {chapter.number}</div>
@@ -315,6 +323,7 @@ export default function ReaderPage() {
           {prevChapter && (
             <Link
               href={`/manga/${id}/read/${prevChapter.id}`}
+              replace
               className="btn btn-secondary btn-sm"
               id="reader-prev-chapter-btn"
               title={`Cap. ${prevChapter.number}`}
@@ -325,6 +334,7 @@ export default function ReaderPage() {
           {nextChapter && (
             <Link
               href={`/manga/${id}/read/${nextChapter.id}`}
+              replace
               className="btn btn-secondary btn-sm"
               id="reader-next-chapter-btn"
               title={`Cap. ${nextChapter.number}`}
@@ -362,15 +372,15 @@ export default function ReaderPage() {
           <div style={{ fontWeight: 700, fontSize: 18 }}>Fin del capítulo {chapter.number}</div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
             {prevChapter && (
-              <Link href={`/manga/${id}/read/${prevChapter.id}`} className="btn btn-secondary" id="reader-end-prev">
+              <Link href={`/manga/${id}/read/${prevChapter.id}`} replace className="btn btn-secondary" id="reader-end-prev">
                 ← Cap. {prevChapter.number}
               </Link>
             )}
-            <Link href={`/manga/${id}`} className="btn btn-ghost" id="reader-end-index">
+            <button onClick={() => router.back()} className="btn btn-ghost" id="reader-end-index">
               📋 Lista
-            </Link>
+            </button>
             {nextChapter && (
-              <Link href={`/manga/${id}/read/${nextChapter.id}`} className="btn btn-primary" id="reader-end-next">
+              <Link href={`/manga/${id}/read/${nextChapter.id}`} replace className="btn btn-primary" id="reader-end-next">
                 Cap. {nextChapter.number} →
               </Link>
             )}
