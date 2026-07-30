@@ -39,6 +39,8 @@ export default function Navbar() {
 
   const isReader = pathname?.includes("/read/");
 
+  if (isReader) return null;
+
   return (
     <nav className="navbar" role="navigation" aria-label="Navegación principal">
       <div className="navbar-inner">

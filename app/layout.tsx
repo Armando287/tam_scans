@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ToastProvider } from "@/contexts/ToastContext";
-import Navbar from "@/components/Navbar";
 import BottomNav from "@/components/BottomNav";
+import Sidebar from "@/components/Sidebar";
+import MainLayout from "@/components/MainLayout";
 
 export const metadata: Metadata = {
   title: "MangaVerse — Lee y descubre mangas",
@@ -27,13 +28,12 @@ export default function RootLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
         <meta name="theme-color" content="#080811" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </head>
       <body>
         <AuthProvider>
           <ToastProvider>
-            <Navbar />
-            <main className="main-content">{children}</main>
+            <Sidebar />
+            <MainLayout>{children}</MainLayout>
             <BottomNav />
           </ToastProvider>
         </AuthProvider>

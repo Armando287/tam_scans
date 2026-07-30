@@ -1,159 +1,179 @@
 "use client";
-import { useState, useRef } from "react";
-import { useAuth } from "@/contexts/AuthContext";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { updateUserProfile } from "@/lib/firestore";
-import Image from "next/image";
+import Link from "next/link";
 
 export default function ProfilePage() {
-  const { user, profile, refreshProfile, getToken } = useAuth();
+  const { user, profile, refreshProfile, logout } = useAuth();
   const router = useRouter();
   const { showToast } = useToast();
-
-  const [displayName, setDisplayName] = useState(profile?.displayName || "");
-  const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  
+  const [displayName, setDisplayName] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    if (profile?.displayName) setDisplayName(profile.displayName);
+    else if (user?.displayName) setDisplayName(user.displayName);
+  }, [profile, user]);
+
   if (!user) {
-    router.replace("/auth/login");
-    return null;
+    return (
+      <div className="empty-state" style={{ marginTop: 80 }}>
+        <div className="empty-state-icon">👤</div>
+        <div className="empty-state-title">No has iniciado sesión</div>
+        <Link href="/auth/login" className="btn btn-primary" style={{ marginTop: 20 }}>Iniciar Sesión</Link>
+      </div>
+    );
   }
 
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault();
-    if (!profile?.uid) return;
-    
-    setSaving(true);
+  const handleSaveName = async () => {
+    if (!displayName.trim()) return;
+    setLoading(true);
     try {
-      await updateUserProfile(profile.uid, { displayName });
+      await updateUserProfile(user.uid, { displayName: displayName.trim() });
       await refreshProfile();
-      showToast("Perfil actualizado correctamente", "success");
+      showToast("Nombre actualizado", "success");
     } catch (error) {
-      console.error(error);
-      showToast("Error al guardar perfil", "error");
+      showToast("Error al guardar", "error");
     } finally {
-      setSaving(false);
+      setLoading(false);
     }
-  }
+  };
 
-  async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !profile?.uid) return;
+    if (!file) return;
 
     if (file.size > 5 * 1024 * 1024) {
-      showToast("La imagen es demasiado grande (Máx 5MB)", "error");
+      showToast("La imagen debe pesar menos de 5MB", "error");
       return;
     }
 
-    setUploading(true);
+    setUploadingAvatar(true);
     try {
-      const token = await getToken();
       const formData = new FormData();
       formData.append("file", file);
+      formData.append("userId", user.uid);
 
       const res = await fetch("/api/upload-avatar", {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
 
+      if (!res.ok) throw new Error("Error al subir");
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Upload failed");
-
-      await updateUserProfile(profile.uid, { avatarUrl: data.url });
+      
+      await updateUserProfile(user.uid, { avatarUrl: data.url });
       await refreshProfile();
-      showToast("Foto de perfil actualizada", "success");
+      showToast("Avatar actualizado", "success");
     } catch (error) {
       console.error(error);
-      showToast("Error al subir imagen", "error");
+      showToast("No se pudo actualizar el avatar", "error");
     } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      setUploadingAvatar(false);
     }
-  }
+  };
+  
+  const handleLogout = async () => {
+     await logout();
+     router.push("/");
+  };
+
+  const avatarSrc = profile?.avatarUrl ? `/api/proxy?url=${encodeURIComponent(profile.avatarUrl)}` : null;
 
   return (
-    <div className="container" style={{ paddingBottom: 100, paddingTop: "calc(var(--navbar-height) + 20px)" }}>
-      <h1 className="section-title" style={{ marginBottom: 24 }}>Mi Perfil</h1>
+    <div className="app-layout-page pb-24">
+      <div className="app-header">
+        <h1 className="app-title">Mi Perfil</h1>
+      </div>
 
-      <div style={{ background: "var(--bg-card)", padding: 24, borderRadius: "var(--radius-lg)", border: "1px solid var(--border-subtle)" }}>
+      {/* Avatar Section */}
+      <div className="profile-hero">
+        <div 
+          className="profile-avatar-wrapper"
+          onClick={() => fileInputRef.current?.click()}
+        >
+          {uploadingAvatar ? (
+            <div className="loading-spinner" style={{ width: 30, height: 30 }} />
+          ) : avatarSrc ? (
+            <img src={avatarSrc} alt="Avatar" className="profile-avatar-img" />
+          ) : (
+            <div className="profile-avatar-placeholder">
+              {(profile?.displayName || user.email || "U")[0].toUpperCase()}
+            </div>
+          )}
+          <div className="profile-avatar-edit-badge">✏️</div>
+        </div>
+        <h2 className="profile-hero-name">{profile?.displayName || user.displayName || "Usuario"}</h2>
+        <p className="profile-hero-email">{user.email}</p>
         
-        {/* Avatar Section */}
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 32 }}>
-          <div 
-            style={{ 
-              width: 120, 
-              height: 120, 
-              borderRadius: "50%", 
-              background: "var(--bg-elevated)",
-              overflow: "hidden",
-              marginBottom: 16,
-              border: "2px solid var(--border-accent)",
-              position: "relative"
-            }}
-          >
-            {profile?.avatarUrl ? (
-              <img 
-                src={profile.avatarUrl} 
-                alt="Avatar" 
-                style={{ width: "100%", height: "100%", objectFit: "cover" }} 
+        <input 
+          type="file" 
+          ref={fileInputRef} 
+          style={{ display: "none" }} 
+          accept="image/png, image/jpeg, image/gif, image/webp"
+          onChange={handleAvatarChange}
+        />
+      </div>
+
+      <div className="settings-list-group">
+        <div className="settings-list-title">Cuenta</div>
+        
+        <div className="settings-list-item">
+          <div className="settings-list-item-content">
+            <label className="settings-label">Nombre de usuario</label>
+            <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+              <input 
+                type="text" 
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                className="settings-input"
+                placeholder="Tu nombre..."
               />
-            ) : (
-              <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 40 }}>
-                👤
-              </div>
-            )}
-            {uploading && (
-              <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <span className="loading-spinner" />
-              </div>
-            )}
+              <button 
+                className="btn btn-primary btn-sm" 
+                onClick={handleSaveName}
+                disabled={loading || displayName === profile?.displayName}
+              >
+                {loading ? "..." : "Guardar"}
+              </button>
+            </div>
           </div>
-          
-          <input 
-            type="file" 
-            accept="image/png, image/jpeg, image/webp, image/gif" 
-            style={{ display: "none" }} 
-            ref={fileInputRef}
-            onChange={handleAvatarUpload}
-          />
-          <button 
-            type="button"
-            className="btn btn-secondary" 
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-          >
-            Cambiar foto
-          </button>
-          <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8 }}>JPG, PNG o GIF animado. Máx 5MB.</p>
         </div>
 
-        {/* Info Section */}
-        <form onSubmit={handleSave} style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 400, margin: "0 auto" }}>
-          <div>
-            <label className="form-label">Correo electrónico (No modificable)</label>
-            <input type="text" className="form-input" value={profile?.email || ""} disabled style={{ opacity: 0.6 }} />
-          </div>
+        {profile?.isAdmin && (
+          <Link href="/admin" className="settings-list-item interactive">
+            <span className="settings-icon">🛡️</span>
+            <span className="settings-label">Panel de Administración</span>
+            <span className="settings-arrow">›</span>
+          </Link>
+        )}
+      </div>
 
-          <div>
-            <label className="form-label">Nombre de usuario</label>
-            <input 
-              type="text" 
-              className="form-input" 
-              value={displayName} 
-              onChange={(e) => setDisplayName(e.target.value)} 
-              required
-              minLength={2}
-            />
-          </div>
+      <div className="settings-list-group">
+        <div className="settings-list-title">Actividad</div>
+        <Link href="/library" className="settings-list-item interactive">
+          <span className="settings-icon">📚</span>
+          <span className="settings-label">Mi Biblioteca</span>
+          <span className="settings-arrow">›</span>
+        </Link>
+        <Link href="/upload" className="settings-list-item interactive">
+          <span className="settings-icon">⬆️</span>
+          <span className="settings-label">Subir Manga</span>
+          <span className="settings-arrow">›</span>
+        </Link>
+      </div>
 
-          <button type="submit" className="btn btn-primary" disabled={saving || displayName === profile?.displayName}>
-            {saving ? "Guardando..." : "Guardar cambios"}
-          </button>
-        </form>
-
+      <div className="settings-list-group">
+        <div className="settings-list-item interactive danger" onClick={handleLogout}>
+          <span className="settings-icon">🚪</span>
+          <span className="settings-label">Cerrar Sesión</span>
+        </div>
       </div>
     </div>
   );
