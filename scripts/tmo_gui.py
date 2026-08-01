@@ -236,6 +236,10 @@ class TMOScraperApp(ctk.CTk):
                         self.log(f"⚠️ No se encontraron capítulos. Intentando con modo avanzado...")
                         use_dp = True
 
+                # Capibaratraductor specific metadata handling
+                if "capibaratraductor.com" in url:
+                    use_dp = True
+
                 html = ""
                 if use_dp:
                     co = ChromiumOptions()
@@ -272,6 +276,10 @@ class TMOScraperApp(ctk.CTk):
                 # Description
                 desc_el = soup.select_one("#manga-synopsis, .element-description, .summary__content, .entry-content, .desc, .description")
                 description = desc_el.text.strip() if desc_el else ""
+                if not description:
+                    meta_desc = soup.select_one("meta[name='description']")
+                    if meta_desc:
+                        description = meta_desc.get("content", "")
                 
                 # Author
                 authors = []
@@ -285,6 +293,12 @@ class TMOScraperApp(ctk.CTk):
                 
                 # Genres
                 genres = [g.text.strip() for g in soup.select("a.badge-primary[href*='genders'], .genres-content a, .mgen a, .tags a, .genres a, a[href*='genre']")]
+                if "capibaratraductor.com" in url and not genres:
+                    # Intento heurístico para CapibaraTraductor buscando spans comunes
+                    for span in soup.select("span"):
+                        text = span.text.strip()
+                        if text in ["Acción", "Aventura", "Comedia", "Drama", "Fantasía", "Romance", "Shounen", "Seinen", "Sobrenatural", "Misterio", "Psicológico"]:
+                            genres.append(text)
                 
                 # Chapters
                 chapters_found = []
@@ -312,18 +326,51 @@ class TMOScraperApp(ctk.CTk):
                                         chapters_found.append({"title": c_title, "url": c_url})
 
                 # Initial extraction
-                _extract_chaps(html)
-                
-                # If we used DrissionPage, also click tabs and extract iteratively
-                if use_dp:
-                    try:
-                        tabs = page.eles('xpath://*[contains(text(), "-")]')
-                        for t in tabs:
-                            if re.match(r'\d+-\d+', t.text):
-                                t.click(by_js=True)
-                                time.sleep(1) # Wait for React render
-                                _extract_chaps(page.html)
-                    except: pass
+                if "capibaratraductor.com" in url:
+                    self.log("⚠️ Detectado CapibaraTraductor. Escaneando capítulos a alta velocidad...")
+                    import concurrent.futures
+                    import requests
+                    
+                    def check_c(num):
+                        curl = f"{url.rstrip('/')}/chapters/{num}"
+                        try:
+                            c_res = requests.head(curl, timeout=5) # HEAD is much faster
+                            if c_res.status_code == 200:
+                                return num, curl
+                            elif c_res.status_code == 405: # Method Not Allowed for HEAD, try GET
+                                c_res2 = requests.get(curl, timeout=5)
+                                if c_res2.status_code == 200 and "404" not in c_res2.url:
+                                    return num, curl
+                        except: pass
+                        return num, None
+
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+                        for chunk_start in range(1, 5000, 50):
+                            futures = [executor.submit(check_c, n) for n in range(chunk_start, chunk_start + 50)]
+                            found_in_chunk = 0
+                            for future in concurrent.futures.as_completed(futures):
+                                num, curl = future.result()
+                                if curl:
+                                    chapters_found.append({"title": f"Capítulo {num}", "url": curl})
+                                    found_in_chunk += 1
+                            if found_in_chunk == 0 and chunk_start > 1:
+                                break
+                            self.log(f"   -> Buscando... (encontrados {len(chapters_found)})")
+                    
+                    chapters_found.sort(key=lambda x: float(x["title"].replace("Capítulo ", "")), reverse=True)
+                else:
+                    _extract_chaps(html)
+                    
+                    # If we used DrissionPage, also click tabs and extract iteratively
+                    if use_dp:
+                        try:
+                            tabs = page.eles('xpath://*[contains(text(), "-")]')
+                            for t in tabs:
+                                if re.match(r'\d+-\d+', t.text):
+                                    t.click(by_js=True)
+                                    time.sleep(1) # Wait for React render
+                                    _extract_chaps(page.html)
+                        except: pass
                                     
                 if not chapters_found:
                     for a_tag in soup.select("a[href*='view_uploads']"):
@@ -487,7 +534,7 @@ class TMOScraperApp(ctk.CTk):
                             time.sleep(2)
                             page.scroll.to_bottom()
                             time.sleep(1)
-                            img_tags = page.eles("css:#viewer-container img, .viewer-page img, .reading-content img, #readerarea img, .page-break img, .vung-doc img, img.reader-image")
+                            img_tags = page.eles("css:#viewer-container img, .viewer-page img, .reading-content img, #readerarea img, .page-break img, .vung-doc img, img.reader-image, img[src*='/chapters/']")
                             images = [img.attr("src") or img.attr("data-src") or img.attr("data-lazy-src") for img in img_tags if img.attr("src") or img.attr("data-src") or img.attr("data-lazy-src")]
                             page.quit()
                         else:

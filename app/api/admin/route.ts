@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
     if (action === "manga-chapters") {
       const mangaId = searchParams.get("mangaId");
       if (!mangaId) return NextResponse.json({ error: "Missing mangaId" }, { status: 400 });
-      const { data: existingChapters } = await client.from("chapters").select("number").eq("mangaId", mangaId);
+      const { data: existingChapters } = await client.from("chapters").select("number").eq("mangaId", mangaId).limit(10000);
       return NextResponse.json({ existingChapters: existingChapters?.map(c => c.number) || [] });
     }
 
